@@ -9,8 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TriageRouteImport } from './routes/triage'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as CandidateRouteImport } from './routes/candidate'
+import { Route as BriefsRouteImport } from './routes/briefs'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TriageRoute = TriageRouteImport.update({
+  id: '/triage',
+  path: '/triage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CandidateRoute = CandidateRouteImport.update({
+  id: '/candidate',
+  path: '/candidate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BriefsRoute = BriefsRouteImport.update({
+  id: '/briefs',
+  path: '/briefs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +49,96 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/briefs': typeof BriefsRoute
+  '/candidate': typeof CandidateRoute
+  '/dashboard': typeof DashboardRoute
+  '/settings': typeof SettingsRoute
+  '/triage': typeof TriageRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/briefs': typeof BriefsRoute
+  '/candidate': typeof CandidateRoute
+  '/dashboard': typeof DashboardRoute
+  '/settings': typeof SettingsRoute
+  '/triage': typeof TriageRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/briefs': typeof BriefsRoute
+  '/candidate': typeof CandidateRoute
+  '/dashboard': typeof DashboardRoute
+  '/settings': typeof SettingsRoute
+  '/triage': typeof TriageRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/briefs'
+    | '/candidate'
+    | '/dashboard'
+    | '/settings'
+    | '/triage'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/briefs' | '/candidate' | '/dashboard' | '/settings' | '/triage'
+  id:
+    | '__root__'
+    | '/'
+    | '/briefs'
+    | '/candidate'
+    | '/dashboard'
+    | '/settings'
+    | '/triage'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BriefsRoute: typeof BriefsRoute
+  CandidateRoute: typeof CandidateRoute
+  DashboardRoute: typeof DashboardRoute
+  SettingsRoute: typeof SettingsRoute
+  TriageRoute: typeof TriageRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/triage': {
+      id: '/triage'
+      path: '/triage'
+      fullPath: '/triage'
+      preLoaderRoute: typeof TriageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/candidate': {
+      id: '/candidate'
+      path: '/candidate'
+      fullPath: '/candidate'
+      preLoaderRoute: typeof CandidateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/briefs': {
+      id: '/briefs'
+      path: '/briefs'
+      fullPath: '/briefs'
+      preLoaderRoute: typeof BriefsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +151,11 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BriefsRoute: BriefsRoute,
+  CandidateRoute: CandidateRoute,
+  DashboardRoute: DashboardRoute,
+  SettingsRoute: SettingsRoute,
+  TriageRoute: TriageRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
