@@ -181,7 +181,8 @@ function Overview() {
         <div className="col-span-full lg:col-span-9">
           <Panel>
             <PanelHeader title="Recent Queue Activity" icon={Zap} />
-            <table className="w-full text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px] min-w-[720px]">
               <thead>
                 <tr className="text-text-muted mono text-[10.5px] uppercase tracking-[0.12em]">
                   <th className="text-left font-normal px-5 pb-2">Company</th>
