@@ -26,7 +26,7 @@ function Overview() {
       {/* Run context strip */}
       <Panel className="mb-5">
         <div className="px-5 pt-3 pb-2 text-[10.5px] mono uppercase tracking-[0.16em] text-text-muted">Current Run Context</div>
-        <div className="grid grid-cols-6 border-t border-hairline-soft">
+        <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 border-t border-hairline-soft">
           {runContext.map((r, i) => (
             <div key={r.label} className={`px-5 py-3.5 ${i < 5 ? "border-r border-hairline-soft" : ""}`}>
               <div className="text-[11px] text-text-muted mb-1">{r.label}</div>
@@ -41,12 +41,12 @@ function Overview() {
         </div>
       </Panel>
 
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Queue by status */}
-        <div className="col-span-8">
+        <div className="col-span-full lg:col-span-8">
           <Panel>
             <PanelHeader title="Queue by Status" icon={Layers} action={<Link to="/triage" className="hover:text-text-primary flex items-center gap-1">View queue <ArrowRight className="w-3 h-3" /></Link>} />
-            <div className="grid grid-cols-4 gap-3 px-5 pb-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-5 pb-5">
               <QueueCountCard label="Pending Review" value={queueCounts["Pending Review"]} sub="High priority" tone="warning" icon={Clock} />
               <QueueCountCard label="Brief Queued"   value={queueCounts["Brief Queued"]}   sub="In progress"  tone="info"    icon={Layers} />
               <QueueCountCard label="Brief Ready"    value={queueCounts["Brief Ready"]}    sub="Ready to publish" tone="success" icon={CheckCircle2} />
@@ -56,7 +56,7 @@ function Overview() {
         </div>
 
         {/* Latest scan status */}
-        <div className="col-span-2">
+        <div className="col-span-full sm:col-span-6 lg:col-span-2">
           <Panel className="h-full">
             <PanelHeader title="Latest Scan" />
             <div className="px-5 pb-5">
@@ -66,7 +66,7 @@ function Overview() {
                 <span className="text-[11px] text-text-muted">· Completed</span>
               </div>
               <div className="text-[11px] text-text-muted mb-3">Today, 08:32 AM</div>
-              <div className="grid grid-cols-2 gap-2 mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
                 <div className="rounded-md border border-hairline-soft p-2.5">
                   <div className="text-[10px] text-text-muted uppercase tracking-wider mono">Candidates</div>
                   <div className="mono text-[18px] font-semibold text-text-primary">27</div>
@@ -82,7 +82,7 @@ function Overview() {
         </div>
 
         {/* Latest brief generation */}
-        <div className="col-span-2">
+        <div className="col-span-full sm:col-span-6 lg:col-span-2">
           <Panel className="h-full">
             <PanelHeader title="Latest Brief Run" action={<MoreHorizontal className="w-4 h-4" />} />
             <div className="px-5 pb-5">
@@ -91,7 +91,7 @@ function Overview() {
                 <span className="mono text-[13px] font-semibold">brief_run_003</span>
               </div>
               <div className="text-[11px] text-text-muted mb-3">Started 09:01 AM</div>
-              <div className="grid grid-cols-3 gap-2 mt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
                 <MiniStat label="Running" value="1" color="#F5A524" />
                 <MiniStat label="Failed"  value="1" color="#FF4D45" />
                 <MiniStat label="Done"    value="5" color="#8EEA45" />
@@ -102,7 +102,7 @@ function Overview() {
         </div>
 
         {/* Candidates by sector */}
-        <div className="col-span-4">
+        <div className="col-span-full md:col-span-6 lg:col-span-4">
           <Panel>
             <PanelHeader title="Candidates by Sector" icon={Radio} />
             <div className="px-5 pb-5 flex items-center gap-5">
@@ -129,7 +129,7 @@ function Overview() {
         </div>
 
         {/* Needs attention */}
-        <div className="col-span-5">
+        <div className="col-span-full lg:col-span-5">
           <Panel>
             <PanelHeader title="Needs Attention" icon={AlertTriangle} />
             <div className="px-3 pb-3 space-y-1">
@@ -151,7 +151,7 @@ function Overview() {
         </div>
 
         {/* Operational runs */}
-        <div className="col-span-3 row-span-2">
+        <div className="col-span-full sm:col-span-6 lg:col-span-3 row-span-2">
           <Panel className="h-full">
             <PanelHeader title="Operational Runs" icon={Activity} action={<MoreHorizontal className="w-4 h-4" />} />
             <div className="px-5 pb-5 space-y-4">
@@ -178,10 +178,11 @@ function Overview() {
         </div>
 
         {/* Recent queue activity */}
-        <div className="col-span-9">
+        <div className="col-span-full lg:col-span-9">
           <Panel>
             <PanelHeader title="Recent Queue Activity" icon={Zap} />
-            <table className="w-full text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px] min-w-[720px]">
               <thead>
                 <tr className="text-text-muted mono text-[10.5px] uppercase tracking-[0.12em]">
                   <th className="text-left font-normal px-5 pb-2">Company</th>
@@ -214,6 +215,7 @@ function Overview() {
                 ))}
               </tbody>
             </table>
+            </div>
             <div className="px-5 py-3 border-t border-hairline-soft">
               <Link to="/triage" className="text-[11.5px] text-text-secondary hover:text-lime flex items-center gap-1">
                 Open full queue <ArrowUpRight className="w-3 h-3" />
@@ -223,7 +225,7 @@ function Overview() {
         </div>
 
         {/* Audit Trail */}
-        <div className="col-span-9">
+        <div className="col-span-full lg:col-span-9">
           <Panel>
             <PanelHeader title="Audit Trail" icon={Users} action={<span className="mono text-[11px]">All Events ▾</span>} />
             <div className="px-5 pb-4 space-y-3">

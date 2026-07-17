@@ -28,7 +28,7 @@ function Triage() {
   return (
     <AppShell title="Triage Queue" subtitle="Primary analyst working surface">
       {/* Run context strip */}
-      <div className="grid grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         <MetricChip label="Latest scan" value="Completed" tone="success" />
         <MetricChip label="Last scan" value="Today, 08:32 AM" mono />
         <MetricChip label="Latest brief run" value="Running" tone="warning" />
@@ -36,11 +36,11 @@ function Triage() {
         <MetricChip label="Brief queued" value="6" mono strong />
       </div>
 
-      <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-9 space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="col-span-full lg:col-span-9 space-y-5">
           {/* Filters */}
           <Panel>
-            <div className="px-5 py-4 grid grid-cols-6 gap-3">
+            <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {filters.map(f => (
                 <div key={f.label}>
                   <div className="text-[10.5px] mono uppercase tracking-wider text-text-muted mb-1.5">{f.label}</div>
@@ -145,7 +145,7 @@ function Triage() {
         </div>
 
         {/* Right rail */}
-        <div className="col-span-3 space-y-5">
+        <div className="col-span-full sm:col-span-6 lg:col-span-3 space-y-5">
           <Panel>
             <PanelHeader title="Operational Runs" icon={Activity} />
             <div className="px-5 pb-5 space-y-4">

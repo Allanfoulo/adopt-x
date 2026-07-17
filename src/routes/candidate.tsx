@@ -77,12 +77,12 @@ function CandidateDetail() {
         <div className="p-6">
           <div className="mono text-[10.5px] uppercase tracking-[0.18em] text-text-muted mb-3">Candidate Headline · dc_002</div>
           <div className="flex items-start gap-4 flex-wrap">
-            <h2 className="font-display text-[28px] leading-tight font-semibold flex-1 min-w-[400px]">
+            <h2 className="font-display text-[22px] sm:text-[26px] lg:text-[28px] leading-tight font-semibold flex-1 min-w-0">
               MediAxis partners with ClinPilot AI to streamline triage workflows
             </h2>
             <StatusBadge status="Needs Review" size="md" />
           </div>
-          <div className="grid grid-cols-6 gap-6 mt-6 pt-5 border-t border-hairline-soft">
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 mt-6 pt-5 border-t border-hairline-soft">
             <HeadlineField label="Company" mark={<CompanyMark letter="M" color="#2DD4BF" size={22} />} value="MediAxis" />
             <HeadlineField label="Target"  mark={<CompanyMark letter="C" color="#4D9DFF" size={22} />} value="ClinPilot AI" />
             <HeadlineField label="Sector"   value="Healthcare" />
@@ -93,9 +93,9 @@ function CandidateDetail() {
         </div>
       </Panel>
 
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* LEFT / MIDDLE */}
-        <div className="col-span-8 space-y-5">
+        <div className="col-span-full lg:col-span-8 space-y-5">
           {/* Source Provenance */}
           <Panel>
             <div className="px-5 py-4 flex items-center justify-between border-b border-hairline-soft">
@@ -105,7 +105,8 @@ function CandidateDetail() {
               </div>
               <button className="text-[11.5px] text-text-secondary hover:text-lime inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Source</button>
             </div>
-            <table className="w-full text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px] min-w-[680px]">
               <thead>
                 <tr className="text-text-muted mono text-[10px] uppercase tracking-[0.10em]">
                   <th className="text-left font-normal px-5 py-2 w-6">#</th>
@@ -131,6 +132,7 @@ function CandidateDetail() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Panel>
 
           {/* Extracted Facts */}
@@ -227,7 +229,7 @@ function CandidateDetail() {
           </Panel>
 
           {/* Notes & Tags */}
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Panel>
               <div className="px-5 py-4 flex items-center justify-between border-b border-hairline-soft">
                 <div className="flex items-center gap-2">
@@ -264,7 +266,7 @@ function CandidateDetail() {
         </div>
 
         {/* RIGHT */}
-        <div className="col-span-4 space-y-5">
+        <div className="col-span-full md:col-span-6 lg:col-span-4 space-y-5">
           <Panel>
             <PanelHeader title="Review State" action={<Edit3 className="w-3.5 h-3.5 cursor-pointer hover:text-lime" />} />
             <div className="px-5 pb-5 space-y-3 text-[13px]">
