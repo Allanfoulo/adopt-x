@@ -49,7 +49,7 @@ function Settings() {
       }
       showStateStrip={false}
     >
-      <div className="grid grid-cols-3 gap-5 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
         {/* Source Toggles */}
         <Panel>
           <div className="px-5 py-4 border-b border-hairline-soft">
@@ -121,7 +121,7 @@ function Settings() {
               <CadenceOption icon={Calendar} title="Daily" desc="Run full scans once per day" selected current />
               <CadenceOption icon={Zap} title="Manual trigger only" desc="Run scans only when triggered" />
 
-              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-hairline-soft mt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-hairline-soft mt-3">
                 <div>
                   <div className="text-[10.5px] mono uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" /> Next scheduled scan</div>
                   <div className="text-[13px] mono font-semibold text-lime">Today, 09:00 AM</div>
@@ -139,7 +139,7 @@ function Settings() {
               <div className="text-[13.5px] font-semibold tracking-tight">Permissions</div>
               <div className="text-[11.5px] text-text-muted mt-0.5">Role-based access and actions.</div>
             </div>
-            <div className="p-5 grid grid-cols-2 gap-3">
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <RoleCard icon={Users} title="Analyst" desc="Review, approve, and generate briefs." role="Default Role"
                 perms={["View all candidates", "Generate briefs", "Approve / Reject", "Add notes"]} />
               <RoleCard icon={Shield} title="Admin" desc="Manage settings and system controls." role="Elevated Role" elevated
@@ -174,7 +174,7 @@ function Settings() {
               All final briefs require explicit analyst approval. This gate cannot be disabled.
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-3 items-stretch">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
             {[
               { icon: Radio,       title: "Scan & Ingest", desc: "Sources scanned and data ingested" },
               { icon: Zap,         title: "Enrich & Score", desc: "Signals extracted and scored" },
@@ -236,7 +236,7 @@ function SourceToggle({ name, desc, icon: Icon, on }: any) {
 
 function ConfigRow({ label, children, future, help }: any) {
   return (
-    <div className="grid grid-cols-2 gap-3 items-start">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
       <div className="pt-2">
         <div className="text-[12.5px] flex items-center gap-1.5">
           {label}

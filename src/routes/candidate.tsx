@@ -82,7 +82,7 @@ function CandidateDetail() {
             </h2>
             <StatusBadge status="Needs Review" size="md" />
           </div>
-          <div className="grid grid-cols-6 gap-6 mt-6 pt-5 border-t border-hairline-soft">
+          <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6 mt-6 pt-5 border-t border-hairline-soft">
             <HeadlineField label="Company" mark={<CompanyMark letter="M" color="#2DD4BF" size={22} />} value="MediAxis" />
             <HeadlineField label="Target"  mark={<CompanyMark letter="C" color="#4D9DFF" size={22} />} value="ClinPilot AI" />
             <HeadlineField label="Sector"   value="Healthcare" />
@@ -93,9 +93,9 @@ function CandidateDetail() {
         </div>
       </Panel>
 
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* LEFT / MIDDLE */}
-        <div className="col-span-8 space-y-5">
+        <div className="col-span-full lg:col-span-8 space-y-5">
           {/* Source Provenance */}
           <Panel>
             <div className="px-5 py-4 flex items-center justify-between border-b border-hairline-soft">
@@ -227,7 +227,7 @@ function CandidateDetail() {
           </Panel>
 
           {/* Notes & Tags */}
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Panel>
               <div className="px-5 py-4 flex items-center justify-between border-b border-hairline-soft">
                 <div className="flex items-center gap-2">
@@ -264,7 +264,7 @@ function CandidateDetail() {
         </div>
 
         {/* RIGHT */}
-        <div className="col-span-4 space-y-5">
+        <div className="col-span-full md:col-span-6 lg:col-span-4 space-y-5">
           <Panel>
             <PanelHeader title="Review State" action={<Edit3 className="w-3.5 h-3.5 cursor-pointer hover:text-lime" />} />
             <div className="px-5 pb-5 space-y-3 text-[13px]">

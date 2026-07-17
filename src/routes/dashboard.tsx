@@ -65,7 +65,7 @@ function Dashboard() {
       }
     >
       {/* KPI row */}
-      <div className="grid grid-cols-6 gap-3 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
         <KPI icon={Users}        label="Total Candidates"    value="127" delta={+19} tone="info" />
         <KPI icon={CheckCircle2} label="Approved Briefs"     value="24"  delta={+26} tone="success" />
         <KPI icon={Clock}        label="Pending Review"      value="14"  delta={-7}  tone="warning" />
@@ -74,10 +74,10 @@ function Dashboard() {
         <KPI icon={Target}       label="Avg. Thesis-Fit"     value="83"  delta={+4}  tone="success" unit="pts" />
       </div>
 
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left/main charts */}
-        <div className="col-span-9 space-y-5">
-          <div className="grid grid-cols-3 gap-5">
+        <div className="col-span-full lg:col-span-9 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <ChartPanel title="Adoption by Sector" footer="Fintech leads in adoption volume, driven by acquisitions.">
               <BarChart data={sectorBars} labels={sectorBars.map(s => s.name)} />
             </ChartPanel>
@@ -91,7 +91,7 @@ function Dashboard() {
             </ChartPanel>
           </div>
 
-          <div className="grid grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <ChartPanel title="AI Role Distribution" footer="Investment intelligence and clinical workflow lead AI role adoption.">
               <BarChart data={roleBars} labels={roleBars.map(r => r.short)} />
             </ChartPanel>
@@ -116,10 +116,10 @@ function Dashboard() {
           </div>
 
           {/* Insights row */}
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Panel>
               <PanelHeader title="Key Insights" icon={Lightbulb} />
-              <div className="px-5 pb-5 grid grid-cols-3 gap-4">
+              <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
                   "Fintech acquisitions show the highest thesis-fit (avg. 88), outperforming other sectors. Review high-scoring fintech acquisitions in the queue.",
                   "Healthcare partnerships have the lowest source confidence (avg. 72) and highest manual review rate. Allocate more analyst time for healthcare.",
@@ -139,7 +139,7 @@ function Dashboard() {
             <Panel>
               <PanelHeader title="Queue Health Summary" icon={Activity} />
               <div className="px-5 pb-5">
-                <div className="grid grid-cols-5 gap-3 mt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-1">
                   {[
                     { label: "Pending Review", value: 14, delta: +2, color: "#F5A524" },
                     { label: "Brief Queued",   value: 6,  delta: 0,  color: "#4D9DFF" },
@@ -165,7 +165,7 @@ function Dashboard() {
         </div>
 
         {/* Right rail */}
-        <div className="col-span-3 space-y-5">
+        <div className="col-span-full sm:col-span-6 lg:col-span-3 space-y-5">
           <Panel>
             <PanelHeader title="Operational Overview" icon={Activity} action={<MoreHorizontal className="w-4 h-4" />} />
             <div className="px-5 pb-5 space-y-4">

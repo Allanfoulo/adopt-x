@@ -62,18 +62,18 @@ function BriefArchive() {
   return (
     <AppShell title="Brief Archive" subtitle="Approved AI adoption briefs downstream of human review and quality assurance">
       {/* Metrics */}
-      <div className="grid grid-cols-4 gap-5 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-5">
         <MetricCard icon={CheckCircle2} tone="success" value="342" label="Approved" sub="Last 30 days" delta={+18} />
         <MetricCard icon={Clock}        tone="info"    value="58"  label="Brief Ready" sub="Last 30 days" delta={+12} />
         <MetricCard icon={ArrowDown}    tone="warning" value="21"  label="Queued" sub="Last 30 days" delta={-8} />
         <MetricCard icon={XCircle}      tone="danger"  value="9"   label="Failed" sub="Last 30 days" delta={-3} />
       </div>
 
-      <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-8 space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="col-span-full lg:col-span-8 space-y-5">
           {/* Filters */}
           <Panel>
-            <div className="px-5 py-4 grid grid-cols-6 gap-3">
+            <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {["Sector","Geography","Deal Type","Status","Version"].map(f => (
                 <div key={f}>
                   <div className="text-[10.5px] mono uppercase tracking-wider text-text-muted mb-1.5">{f}</div>
@@ -209,7 +209,7 @@ function BriefArchive() {
         </div>
 
         {/* Right rail */}
-        <div className="col-span-4 space-y-5">
+        <div className="col-span-full md:col-span-6 lg:col-span-4 space-y-5">
           <Panel>
             <PanelHeader title="Recent Brief Runs" icon={Activity} action={<RefreshCw className="w-3.5 h-3.5 cursor-pointer hover:text-lime" />} />
             <div className="px-5 pb-5 space-y-2">
