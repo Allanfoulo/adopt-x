@@ -105,7 +105,8 @@ function CandidateDetail() {
               </div>
               <button className="text-[11.5px] text-text-secondary hover:text-lime inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Source</button>
             </div>
-            <table className="w-full text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px] min-w-[680px]">
               <thead>
                 <tr className="text-text-muted mono text-[10px] uppercase tracking-[0.10em]">
                   <th className="text-left font-normal px-5 py-2 w-6">#</th>
@@ -131,6 +132,7 @@ function CandidateDetail() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Panel>
 
           {/* Extracted Facts */}
