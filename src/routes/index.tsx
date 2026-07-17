@@ -215,6 +215,7 @@ function Overview() {
                 ))}
               </tbody>
             </table>
+            </div>
             <div className="px-5 py-3 border-t border-hairline-soft">
               <Link to="/triage" className="text-[11.5px] text-text-secondary hover:text-lime flex items-center gap-1">
                 Open full queue <ArrowUpRight className="w-3 h-3" />

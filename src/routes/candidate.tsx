@@ -77,7 +77,7 @@ function CandidateDetail() {
         <div className="p-6">
           <div className="mono text-[10.5px] uppercase tracking-[0.18em] text-text-muted mb-3">Candidate Headline · dc_002</div>
           <div className="flex items-start gap-4 flex-wrap">
-            <h2 className="font-display text-[28px] leading-tight font-semibold flex-1 min-w-[400px]">
+            <h2 className="font-display text-[22px] sm:text-[26px] lg:text-[28px] leading-tight font-semibold flex-1 min-w-0">
               MediAxis partners with ClinPilot AI to streamline triage workflows
             </h2>
             <StatusBadge status="Needs Review" size="md" />
