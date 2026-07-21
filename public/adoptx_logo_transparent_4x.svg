@@ -1,0 +1,28 @@
+<svg width="196" height="196" viewBox="0 0 49 49" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+  <defs>
+    <linearGradient id="silver" x1="8" y1="8" x2="41" y2="41" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F3F6FA"/>
+      <stop offset="0.55" stop-color="#AAB3BC"/>
+      <stop offset="1" stop-color="#F4F6F8"/>
+    </linearGradient>
+    <linearGradient id="lime" x1="30" y1="6" x2="43" y2="19" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D6FF67"/>
+      <stop offset="1" stop-color="#9FE23A"/>
+    </linearGradient>
+    <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+
+  <g filter="url(#softShadow)" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Adopt X mark: three silver arms and one lime active arm -->
+    <path d="M13 12.5L21.5 21" stroke="url(#silver)" stroke-width="7.2"/>
+    <path d="M28 28L36.5 36.5" stroke="url(#silver)" stroke-width="7.2"/>
+    <path d="M13 36.5L21.5 28" stroke="url(#silver)" stroke-width="7.2"/>
+    <path d="M28 21L36.5 12.5" stroke="url(#lime)" stroke-width="7.2"/>
+    <circle cx="24.5" cy="24.5" r="3.1" fill="#0B1117" opacity="0.96"/>
+  </g>
+
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Candidate Detail</title>
+  <g stroke="#E8EDF3" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M38 18h34l18 18v52c0 8.837-7.163 16-16 16H38c-8.837 0-16-7.163-16-16V34c0-8.837 7.163-16 16-16z"/>
+    <path d="M72 18v13c0 5.523 4.477 10 10 10h8"/>
+    <circle cx="56" cy="43" r="8"/>
+    <path d="M43 63c2.4-7.2 8-12 13-12s10.6 4.8 13 12"/>
+    <path d="M39 78h31"/>
+    <path d="M39 90h27"/>
+    <path d="M39 101h23"/>
+  </g>
+  <g stroke="#B8ED3B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="91" cy="87" r="16"/>
+    <path d="M102 98l14 14"/>
+  </g>
+</svg>

@@ -1,0 +1,227 @@
+{
+  "sourceHits": [
+    {
+      "id": "sh_001",
+      "sourceClass": "primary_structured",
+      "sourceType": "exchange_announcement",
+      "publisher": "JSE SENS",
+      "url": "https://example.com/sens/purple-telescope",
+      "headline": "Purple Group to acquire Telescope AI",
+      "publishedAt": "2026-07-16T08:00:00Z",
+      "rawExcerpt": "Purple Group announced an agreement to acquire Telescope AI.",
+      "scanRunId": "scan_001",
+      "hash": "purple-telescope-2026-07-16"
+    },
+    {
+      "id": "sh_002",
+      "sourceClass": "primary_structured",
+      "sourceType": "press_release",
+      "publisher": "Business Wire",
+      "url": "https://example.com/bw/health-partnership",
+      "headline": "MediAxis partners with ClinPilot AI to streamline triage workflows",
+      "publishedAt": "2026-07-15T13:00:00Z",
+      "rawExcerpt": "The companies announced a strategic partnership focused on intake and triage.",
+      "scanRunId": "scan_001",
+      "hash": "mediaxis-clinpilot-2026-07-15"
+    },
+    {
+      "id": "sh_003",
+      "sourceClass": "primary_structured",
+      "sourceType": "ir_release",
+      "publisher": "InsuraCo IR",
+      "url": "https://example.com/ir/insuraco-claimforge",
+      "headline": "InsuraCo invests in ClaimForge AI automation platform",
+      "publishedAt": "2026-07-14T10:20:00Z",
+      "rawExcerpt": "Investment intended to expand claims workflow automation.",
+      "scanRunId": "scan_001",
+      "hash": "insuraco-claimforge-2026-07-14"
+    },
+    {
+      "id": "sh_004",
+      "sourceClass": "primary_structured",
+      "sourceType": "sector_press",
+      "publisher": "LegalTech Journal",
+      "url": "https://example.com/legaltech/lexgrid-acquires-regaicore",
+      "headline": "LexGrid acquires RegAICore for compliance review automation",
+      "publishedAt": "2026-07-13T16:40:00Z",
+      "rawExcerpt": "The acquisition expands document and compliance review capabilities.",
+      "scanRunId": "scan_001",
+      "hash": "lexgrid-regaicore-2026-07-13"
+    },
+    {
+      "id": "sh_005",
+      "sourceClass": "primary_structured",
+      "sourceType": "press_release",
+      "publisher": "PR Newswire",
+      "url": "https://example.com/pr/random-ai-launch",
+      "headline": "Startup launches general AI marketing copilot",
+      "publishedAt": "2026-07-12T09:00:00Z",
+      "rawExcerpt": "Standalone launch with no integration deal or incumbent adoption angle.",
+      "scanRunId": "scan_001",
+      "hash": "random-marketing-copilot-2026-07-12"
+    }
+  ],
+  "dealCandidates": [
+    {
+      "id": "dc_001",
+      "dedupeKey": "purple-group-telescope-ai",
+      "status": "brief_ready",
+      "company": "Purple Group",
+      "target": "Telescope AI",
+      "dealType": "acquisition",
+      "sector": "fintech",
+      "geography": "South Africa / Australia",
+      "announcementDate": "2026-07-16",
+      "aiRole": "investment intelligence infrastructure",
+      "sourceConfidence": 95,
+      "confidenceScore": 92,
+      "thesisFitScore": 94,
+      "reviewEdits": {
+        "editedBy": "analyst_01",
+        "fields": ["aiRole"],
+        "notes": "Clarified AI role as domain infrastructure, not consumer assistant."
+      }
+    },
+    {
+      "id": "dc_002",
+      "dedupeKey": "mediaxis-clinpilot-ai",
+      "status": "pending_review",
+      "company": "MediAxis",
+      "target": "ClinPilot AI",
+      "dealType": "strategic_partnership",
+      "sector": "healthcare",
+      "geography": "UK",
+      "announcementDate": "2026-07-15",
+      "aiRole": "clinical workflow support",
+      "sourceConfidence": 88,
+      "confidenceScore": 81,
+      "thesisFitScore": 86,
+      "reviewEdits": null
+    },
+    {
+      "id": "dc_003",
+      "dedupeKey": "insuraco-claimforge-ai",
+      "status": "approved",
+      "company": "InsuraCo",
+      "target": "ClaimForge AI",
+      "dealType": "strategic_investment",
+      "sector": "insurance",
+      "geography": "US",
+      "announcementDate": "2026-07-14",
+      "aiRole": "claims automation",
+      "sourceConfidence": 84,
+      "confidenceScore": 79,
+      "thesisFitScore": 83,
+      "reviewEdits": {
+        "editedBy": "analyst_01",
+        "fields": ["dealType", "thesisFitScore"],
+        "notes": "Downgraded from partnership to strategic investment."
+      }
+    },
+    {
+      "id": "dc_004",
+      "dedupeKey": "lexgrid-regaicore",
+      "status": "brief_queued",
+      "company": "LexGrid",
+      "target": "RegAICore",
+      "dealType": "acquisition",
+      "sector": "legal",
+      "geography": "Australia",
+      "announcementDate": "2026-07-13",
+      "aiRole": "compliance review automation",
+      "sourceConfidence": 82,
+      "confidenceScore": 77,
+      "thesisFitScore": 85,
+      "reviewEdits": null
+    },
+    {
+      "id": "dc_005",
+      "dedupeKey": "random-marketing-copilot",
+      "status": "rejected",
+      "company": "SparkPrompt",
+      "target": "",
+      "dealType": "product_launch",
+      "sector": "marketing_software",
+      "geography": "US",
+      "announcementDate": "2026-07-12",
+      "aiRole": "generic marketing copilot",
+      "sourceConfidence": 60,
+      "confidenceScore": 41,
+      "thesisFitScore": 22,
+      "reviewEdits": {
+        "editedBy": "analyst_01",
+        "fields": ["status"],
+        "notes": "Rejected as off-thesis and non-regulated."
+      }
+    }
+  ],
+  "scanRuns": [
+    {
+      "id": "scan_001",
+      "status": "completed",
+      "sourceTypes": ["exchange_announcement", "press_release", "ir_release", "sector_press"],
+      "hitCount": 5,
+      "candidateCount": 5,
+      "errorCount": 0,
+      "startedAt": "2026-07-16T07:45:00Z",
+      "completedAt": "2026-07-16T08:02:00Z"
+    }
+  ],
+  "briefRuns": [
+    {
+      "id": "brief_001",
+      "candidateId": "dc_001",
+      "status": "completed",
+      "last30daysUsed": true,
+      "startedAt": "2026-07-16T08:10:00Z",
+      "completedAt": "2026-07-16T08:15:00Z",
+      "error": null
+    },
+    {
+      "id": "brief_002",
+      "candidateId": "dc_004",
+      "status": "running",
+      "last30daysUsed": false,
+      "startedAt": "2026-07-16T08:16:00Z",
+      "completedAt": null,
+      "error": null
+    }
+  ],
+  "dealBriefs": [
+    {
+      "id": "db_001",
+      "candidateId": "dc_001",
+      "version": 1,
+      "executiveSummary": "Purple Group acquires Telescope AI to accelerate domain-specific AI infrastructure in investing.",
+      "transactionOverview": "100% acquisition with mixed consideration and earn-out mechanics.",
+      "strategicRationale": "Acquire mature AI research capability rather than build internally.",
+      "dealStructure": "Cash, equity, and performance-based earn-out.",
+      "risks": ["integration risk", "regulatory risk", "adoption risk"],
+      "marketImplications": "Signals AI as financial infrastructure rather than a surface feature.",
+      "keyTakeaways": [
+        "AI capability bought as core infrastructure",
+        "Existing enterprise relationships increase strategic value",
+        "Supports adoption thesis in regulated sectors"
+      ],
+      "sourcesSnapshot": ["sh_001"]
+    }
+  ],
+  "reviewAuditEvents": [
+    {
+      "id": "audit_001",
+      "candidateId": "dc_001",
+      "actor": "analyst_01",
+      "action": "edit_and_approve",
+      "before": {
+        "aiRole": "conversational investing"
+      },
+      "after": {
+        "aiRole": "investment intelligence infrastructure"
+      },
+      "reason": "Refined role to better reflect acquisition thesis.",
+      "createdAt": "2026-07-16T08:08:00Z",
+      "correlationId": "corr_001"
+    }
+  ]
+}
+

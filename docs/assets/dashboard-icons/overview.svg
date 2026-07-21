@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Overview</title>
+  <g stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="24" y="24" width="28" height="28" rx="7" stroke="#E8EDF3"/>
+    <rect x="64" y="24" width="28" height="28" rx="7" stroke="#E8EDF3"/>
+    <rect x="24" y="64" width="28" height="28" rx="7" stroke="#E8EDF3"/>
+    <rect x="64" y="64" width="28" height="28" rx="7" stroke="#B8ED3B"/>
+  </g>
+</svg>

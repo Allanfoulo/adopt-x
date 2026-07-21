@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Brief Archive</title>
+  <g stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M48 18h26l14 14v16" stroke="#E8EDF3" stroke-opacity=".45"/>
+    <path d="M38 30h28l16 16v30H38c-4.418 0-8-3.582-8-8V38c0-4.418 3.582-8 8-8z" stroke="#E8EDF3"/>
+    <path d="M66 30v12c0 5.523 4.477 10 10 10h6" stroke="#E8EDF3"/>
+    <path d="M42 48h18" stroke="#E8EDF3"/>
+    <path d="M42 60h26" stroke="#E8EDF3"/>
+    <path d="M20 70h16l10-12h36l10 12h16v18c0 7.732-6.268 14-14 14H34c-7.732 0-14-6.268-14-14V70z" stroke="#E8EDF3"/>
+    <rect x="48" y="84" width="32" height="10" rx="5" stroke="#B8ED3B"/>
+  </g>
+</svg>

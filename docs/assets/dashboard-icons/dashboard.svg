@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>Dashboard</title>
+  <g stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="18" y="24" width="92" height="72" rx="10" stroke="#E8EDF3"/>
+    <path d="M18 44h92" stroke="#E8EDF3"/>
+    <rect x="31" y="75" width="12" height="15" rx="2" stroke="#E8EDF3"/>
+    <rect x="48" y="61" width="12" height="29" rx="2" stroke="#E8EDF3"/>
+    <rect x="65" y="47" width="12" height="43" rx="2" stroke="#B8ED3B"/>
+    <circle cx="90" cy="75" r="18" stroke="#E8EDF3"/>
+    <path d="M90 57a18 18 0 0 1 18 18H90V57z" stroke="#B8ED3B"/>
+  </g>
+  <circle cx="30" cy="34" r="3" fill="#B8ED3B"/>
+  <circle cx="40" cy="34" r="3" fill="#8E959E"/>
+  <circle cx="50" cy="34" r="3" fill="#8E959E"/>
+</svg>

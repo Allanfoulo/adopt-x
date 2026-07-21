@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adopt X Dataflow Visuals</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f6f8;
+      color: #18212b;
+    }
+    h1, h2 { margin-top: 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: white;
+      border: 1px solid #d8dee6;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #5c6978;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .arrow {
+      text-align: center;
+      font-size: 28px;
+      color: #718197;
+      margin: 8px 0;
+    }
+    .note {
+      background: #fff7e8;
+      border: 1px solid #f0d8a3;
+      padding: 14px;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Adopt X Dataflow Visuals</h1>
+  <p>Static visual companion for the approved MVP workflow.</p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">1. Intake</div>
+      <h2>Source Hits</h2>
+      <p>Structured public sources are captured with provenance and scan-run linkage.</p>
+    </div>
+    <div class="card">
+      <div class="label">2. Normalize</div>
+      <h2>Deal Candidates</h2>
+      <p>Raw hits are deduped and converted into canonical working records.</p>
+    </div>
+    <div class="card">
+      <div class="label">3. Review</div>
+      <h2>Triage Queue</h2>
+      <p>Analyst approves, rejects, and edits tags or scores with audit history.</p>
+    </div>
+    <div class="card">
+      <div class="label">4. Output</div>
+      <h2>Brief Archive</h2>
+      <p>Approved candidates become structured adoption briefs and dashboard entries.</p>
+    </div>
+  </div>
+
+  <div class="arrow">Intake -> Normalize -> Review -> Brief</div>
+
+  <div class="note">
+    <strong>Control rule:</strong> social or community research can enrich a candidate, but cannot bypass the candidate queue in the MVP.
+  </div>
+</body>
+</html>
+

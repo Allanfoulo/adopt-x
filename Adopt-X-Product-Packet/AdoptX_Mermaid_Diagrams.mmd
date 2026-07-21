@@ -1,0 +1,44 @@
+flowchart LR
+  A[Structured Public Sources] --> B[source_hit.captured]
+  B --> C[Normalize and Dedupe]
+  C --> D[dealCandidate]
+  D --> E[Triage Agent Scoring]
+  E --> F[pending_review Queue]
+  F --> G{Human Review}
+  G -->|Reject| H[rejected]
+  G -->|Approve| I[brief.requested]
+  I --> J[Brief Job]
+  J --> K[last30days Enrichment Optional]
+  K --> L[dealBrief]
+  L --> M[Archive and Dashboard]
+
+---
+
+flowchart TD
+  U[Analyst opens queue] --> V[Open candidate detail]
+  V --> W[Inspect provenance]
+  W --> X[Edit tags or scores]
+  X --> Y{Decision}
+  Y -->|Approve| Z[Queue brief]
+  Y -->|Reject| R[Store rejection and audit event]
+
+---
+
+flowchart TD
+  S[scanRun queued] --> T[scanRun running]
+  T --> U1[sourceHits stored]
+  U1 --> V1[dealCandidates updated]
+  V1 --> W1[scoreCandidatesJob]
+  W1 --> X1[pending_review]
+
+---
+
+flowchart TD
+  B1[brief_queued] --> B2[briefRun running]
+  B2 --> B3[load approved candidate]
+  B3 --> B4[optional last30days enrichment]
+  B4 --> B5[draft structured brief]
+  B5 --> B6{valid output}
+  B6 -->|yes| B7[brief_ready]
+  B6 -->|no| B8[brief_failed]
+
