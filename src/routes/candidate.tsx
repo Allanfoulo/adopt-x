@@ -1,4 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import { makeFunctionReference } from "convex/server";
+import type { FunctionReference } from "convex/server";
 import { AppShell, Panel, StatusBadge, ToolbarButton } from "@/components/app-shell";
 import {
   ArrowLeft,
@@ -25,6 +28,90 @@ export const Route = createFileRoute("/candidate")({
   component: CandidateDetail,
 });
 
+type HeroField = {
+  label: string;
+  value: string;
+  tone?: "teal" | "blue";
+  mark?: string;
+};
+
+type SourceRow = {
+  n: number;
+  headline: string;
+  publisher: string;
+  date: string;
+  type: string;
+  tone: string;
+  url?: string;
+};
+
+type FactRow = {
+  label: string;
+  value: string;
+  source: "ai" | "human";
+};
+
+type ScoreRow = {
+  label: string;
+  value: number;
+  helper: string;
+  source: "ai" | "human";
+};
+
+type ValidationRow = {
+  label: string;
+  value: string;
+};
+
+type ScoreExplanation = {
+  title: string;
+  body: string;
+};
+
+type AuditTrailEntry = {
+  name: string;
+  action: string;
+  detail: string;
+  when: string;
+  initials: string;
+  tone: "human" | "system";
+};
+
+type CandidateDetailData = {
+  candidate: {
+    id: string;
+    company: string;
+    target: string;
+    headline: string;
+    status: string;
+  };
+  heroFields: HeroField[];
+  facts: FactRow[];
+  sources: SourceRow[];
+  scoreRows: ScoreRow[];
+  validationRows: ValidationRow[];
+  scoreExplanations: ScoreExplanation[];
+  auditTrail: AuditTrailEntry[];
+  reviewState: {
+    status: string;
+    assignedTo: string;
+    assignedOn: string;
+    sla: string;
+  };
+  summary: {
+    text: string;
+    reasons: string[];
+  };
+  tags: string[];
+};
+
+const getCandidateDetail: FunctionReference<
+  "query",
+  "public",
+  { externalId?: string },
+  CandidateDetailData | null
+> = makeFunctionReference("candidate:getDetail");
+
 const heroFields = [
   { label: "Company", value: "MediAxis", tone: "teal", mark: "M" },
   { label: "Target", value: "ClinPilot AI", tone: "blue", mark: "C" },
@@ -33,12 +120,7 @@ const heroFields = [
   { label: "Deal Type", value: "Strategic Partnership" },
   { label: "AI Role", value: "Clinical workflow support" },
   { label: "Published", value: "Jul 15, 2025" },
-] satisfies readonly {
-  label: string;
-  value: string;
-  tone?: "teal" | "blue";
-  mark?: string;
-}[];
+] satisfies readonly HeroField[];
 
 const sources = [
   {
@@ -174,7 +256,51 @@ const tagGroups = [
   "Press Release",
 ];
 
+function buildCandidateView(detail: CandidateDetailData | null | undefined): CandidateDetailData {
+  if (!detail) {
+    return {
+      candidate: {
+        id: "dc_002",
+        company: "MediAxis",
+        target: "ClinPilot AI",
+        headline: "MediAxis partners with ClinPilot AI to streamline triage workflows",
+        status: "Needs Review",
+      },
+      heroFields: [...heroFields],
+      sources: [...sources],
+      facts: [...facts],
+      scoreRows: [...scoreRows],
+      validationRows: [...validationRows],
+      scoreExplanations: [...scoreExplanations],
+      auditTrail: auditTrail.map((entry) => ({
+        ...entry,
+        tone: entry.tone as "human" | "system",
+      })),
+      reviewState: {
+        status: "Needs Review",
+        assignedTo: "Maya Patel",
+        assignedOn: "Jul 15, 2025, 09:10 AM",
+        sla: "Due in 2d 16h",
+      },
+      summary: {
+        text:
+          "This partnership aligns strongly with our thesis on AI-driven clinical workflow automation. ClinPilot AI provides AI-powered triage and decision support capabilities that integrate with MediAxis's clinical systems, aiming to reduce clinician workload and improve patient throughput in UK healthcare settings.",
+        reasons: [
+          "Direct application of AI to clinical workflow and triage processes",
+          "Partnership expands reach within the UK healthcare market",
+          "Addresses measurable outcomes: efficiency, accuracy, and clinician productivity",
+        ],
+      },
+      tags: [...tagGroups],
+    };
+  }
+
+  return detail;
+}
+
 function CandidateDetail() {
+  const detail = useQuery(getCandidateDetail, { externalId: "dc_002" });
+  const view = buildCandidateView(detail);
   const actions = (
     <>
       <ToolbarButton icon={Edit3}>Edit Mode</ToolbarButton>
@@ -219,32 +345,32 @@ function CandidateDetail() {
         </Link>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_292px]">
-          <CandidateHeroCard />
-          <ReviewStateCard />
+          <CandidateHeroCard candidate={view.candidate} fields={view.heroFields} />
+          <ReviewStateCard reviewState={view.reviewState} />
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_292px]">
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_.95fr]">
-              <SourceProvenanceCard />
-              <ExtractedFactsCard />
+              <SourceProvenanceCard sources={view.sources} />
+              <ExtractedFactsCard facts={view.facts} />
             </div>
 
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[.9fr_1.1fr]">
-              <AiSummaryCard />
-              <AttributesScoresCard />
+              <AiSummaryCard summary={view.summary} />
+              <AttributesScoresCard facts={view.facts} scoreRows={view.scoreRows} />
             </div>
 
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[.9fr_1.1fr]">
               <AnalystNotesCard />
-              <InternalTagsCard />
+              <InternalTagsCard tags={view.tags} />
             </div>
           </div>
 
           <div className="space-y-5">
-            <ProvenanceValidationCard />
-            <ScoreExplanationsCard />
-            <AuditTrailCard />
+            <ProvenanceValidationCard rows={view.validationRows} />
+            <ScoreExplanationsCard items={view.scoreExplanations} />
+            <AuditTrailCard entries={view.auditTrail} />
             <SocialCommunityCard />
           </div>
         </div>
@@ -253,7 +379,13 @@ function CandidateDetail() {
   );
 }
 
-function CandidateHeroCard() {
+function CandidateHeroCard({
+  candidate,
+  fields,
+}: {
+  candidate: CandidateDetailData["candidate"];
+  fields: HeroField[];
+}) {
   return (
     <Panel>
       <div className="p-5 lg:p-6">
@@ -265,16 +397,16 @@ function CandidateHeroCard() {
         </div>
         <div className="flex flex-wrap items-start gap-3">
           <h2 className="min-w-0 flex-1 font-display text-[22px] font-semibold leading-tight tracking-tight lg:text-[24px]">
-            MediAxis partners with ClinPilot AI to streamline triage workflows
+            {candidate.headline}
           </h2>
-          <StatusBadge status="Needs Review" size="md" />
+          <StatusBadge status={candidate.status} size="md" />
         </div>
         <div className="mt-6 grid grid-cols-2 gap-y-4 border-t border-hairline-soft pt-5 sm:grid-cols-3 xl:grid-cols-7 xl:gap-y-0">
-          {heroFields.map((field, index) => (
+          {fields.map((field, index) => (
             <div
               key={field.label}
               className={`min-w-0 pr-4 xl:px-4 ${index === 0 ? "xl:pl-0" : ""} ${
-                index < heroFields.length - 1 ? "xl:border-r xl:border-hairline-soft" : ""
+                index < fields.length - 1 ? "xl:border-r xl:border-hairline-soft" : ""
               }`}
             >
               <div className="mb-1.5 text-[9px] uppercase tracking-[0.12em] text-text-muted">
@@ -292,7 +424,7 @@ function CandidateHeroCard() {
   );
 }
 
-function ReviewStateCard() {
+function ReviewStateCard({ reviewState }: { reviewState: CandidateDetailData["reviewState"] }) {
   return (
     <Panel className="h-full">
       <div className="p-5">
@@ -303,20 +435,23 @@ function ReviewStateCard() {
           <Info className="h-3.5 w-3.5 text-text-muted" />
         </div>
         <div className="space-y-4 text-[11.5px]">
-          <ReviewRow label="Overall Status" value={<StatusBadge status="Needs Review" size="xs" />} />
-          <ReviewRow label="Assigned To" value={<span className="font-medium text-text-primary">Maya Patel</span>} />
+          <ReviewRow label="Overall Status" value={<StatusBadge status={reviewState.status} size="xs" />} />
+          <ReviewRow
+            label="Assigned To"
+            value={<span className="font-medium text-text-primary">{reviewState.assignedTo}</span>}
+          />
           <ReviewRow
             label="Assigned On"
-            value={<span className="text-text-primary">Jul 15, 2025, 09:10 AM</span>}
+            value={<span className="text-text-primary">{reviewState.assignedOn}</span>}
           />
-          <ReviewRow label="SLA" value={<span className="text-text-primary">Due in 2d 16h</span>} />
+          <ReviewRow label="SLA" value={<span className="text-text-primary">{reviewState.sla}</span>} />
         </div>
       </div>
     </Panel>
   );
 }
 
-function SourceProvenanceCard() {
+function SourceProvenanceCard({ sources }: { sources: SourceRow[] }) {
   return (
     <Panel>
       <SectionHeader number="1." title="Source Provenance" />
@@ -363,7 +498,7 @@ function SourceProvenanceCard() {
   );
 }
 
-function ExtractedFactsCard() {
+function ExtractedFactsCard({ facts }: { facts: FactRow[] }) {
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-3.5">
@@ -390,7 +525,7 @@ function ExtractedFactsCard() {
   );
 }
 
-function AiSummaryCard() {
+function AiSummaryCard({ summary }: { summary: CandidateDetailData["summary"] }) {
   return (
     <Panel>
       <div className="flex items-center gap-2 border-b border-hairline-soft px-4 py-3.5">
@@ -398,20 +533,11 @@ function AiSummaryCard() {
         <SourceChip source="ai" />
       </div>
       <div className="space-y-5 p-4 text-[11.5px] leading-relaxed text-text-secondary">
-        <p>
-          This partnership aligns strongly with our thesis on AI-driven clinical workflow
-          automation. ClinPilot AI provides AI-powered triage and decision support capabilities
-          that integrate with MediAxis&apos;s clinical systems, aiming to reduce clinician workload
-          and improve patient throughput in UK healthcare settings.
-        </p>
+        <p>{summary.text}</p>
         <div>
           <div className="mb-3 text-[10.5px] font-medium text-text-primary">Key Reasons</div>
           <div className="space-y-3">
-            {[
-              "Direct application of AI to clinical workflow and triage processes",
-              "Partnership expands reach within the UK healthcare market",
-              "Addresses measurable outcomes: efficiency, accuracy, and clinician productivity",
-            ].map((reason) => (
+            {summary.reasons.map((reason) => (
               <div key={reason} className="flex items-start gap-2.5">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-lime" />
                 <span className="text-text-primary">{reason}</span>
@@ -424,7 +550,7 @@ function AiSummaryCard() {
   );
 }
 
-function AttributesScoresCard() {
+function AttributesScoresCard({ facts, scoreRows }: { facts: FactRow[]; scoreRows: ScoreRow[] }) {
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-3.5">
@@ -442,7 +568,9 @@ function AttributesScoresCard() {
           <div>Value</div>
           <div>Status</div>
         </div>
-        {facts.slice(2, 5).concat([{ label: "AI Role", value: "Clinical workflow support", source: "human" as const }]).map((item) => (
+        {facts
+          .filter((fact) => ["Sector", "Deal Type", "AI Role", "Geography"].includes(fact.label))
+          .map((item) => (
           <div key={item.label} className="grid grid-cols-[160px_1fr_auto] gap-3 border-t border-hairline-soft py-2.5 text-[11.5px]">
             <div className="text-text-secondary">{item.label}</div>
             <div className="text-text-primary">{item.value}</div>
@@ -490,7 +618,7 @@ function AnalystNotesCard() {
   );
 }
 
-function InternalTagsCard() {
+function InternalTagsCard({ tags }: { tags: string[] }) {
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-3.5">
@@ -500,7 +628,7 @@ function InternalTagsCard() {
         </button>
       </div>
       <div className="flex flex-wrap gap-2 p-4">
-        {tagGroups.map((tag) => (
+        {tags.map((tag) => (
           <span
             key={tag}
             className="inline-flex h-8 items-center gap-2 rounded-md border border-hairline bg-surface-2 px-3 text-[10.5px] text-text-primary"
@@ -514,7 +642,7 @@ function InternalTagsCard() {
   );
 }
 
-function ProvenanceValidationCard() {
+function ProvenanceValidationCard({ rows }: { rows: ValidationRow[] }) {
   return (
     <Panel>
       <div className="flex items-center gap-2 border-b border-hairline-soft px-4 py-3.5">
@@ -524,7 +652,7 @@ function ProvenanceValidationCard() {
         <Info className="h-3.5 w-3.5 text-text-muted" />
       </div>
       <div className="space-y-3 p-4 text-[10.5px]">
-        {validationRows.map((row) => (
+        {rows.map((row) => (
           <div key={row.label} className="flex items-center justify-between gap-3">
             <span className="inline-flex items-center gap-2 text-text-primary">
               <CheckCircle2 className="h-4 w-4 text-lime" />
@@ -538,7 +666,7 @@ function ProvenanceValidationCard() {
   );
 }
 
-function ScoreExplanationsCard() {
+function ScoreExplanationsCard({ items }: { items: ScoreExplanation[] }) {
   return (
     <Panel>
       <div className="flex items-center gap-2 border-b border-hairline-soft px-4 py-3.5">
@@ -548,7 +676,7 @@ function ScoreExplanationsCard() {
         <Info className="h-3.5 w-3.5 text-text-muted" />
       </div>
       <div className="space-y-4 p-4">
-        {scoreExplanations.map((item) => (
+        {items.map((item) => (
           <div key={item.title} className="flex items-start gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-hairline bg-surface-1 text-text-secondary">
               <Info className="h-4 w-4" />
@@ -564,7 +692,7 @@ function ScoreExplanationsCard() {
   );
 }
 
-function AuditTrailCard() {
+function AuditTrailCard({ entries }: { entries: AuditTrailEntry[] }) {
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-3.5">
@@ -574,7 +702,7 @@ function AuditTrailCard() {
         <button className="text-[10.5px] text-text-secondary hover:text-lime">View all</button>
       </div>
       <div className="space-y-4 p-4">
-        {auditTrail.map((item) => (
+        {entries.map((item) => (
           <div key={`${item.name}-${item.action}-${item.when}`} className="flex items-start gap-3">
             <div
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[9.5px] font-semibold"
