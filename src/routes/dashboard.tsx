@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import type { ReactNode } from "react";
 import {
   Activity,
@@ -16,34 +18,70 @@ import {
   Users,
 } from "lucide-react";
 import { AppShell, Panel, PanelHeader, ToolbarButton, statusStyles } from "@/components/app-shell";
+import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard - Adopt X" }] }),
   component: Dashboard,
 });
 
-const sectorBars = [
+type DashboardInsights = FunctionReturnType<typeof api.dashboard.getInsights>;
+
+type BarDatum = {
+  name: string;
+  value: number;
+  color: string;
+  short?: string;
+};
+
+type GeoDatum = {
+  name: string;
+  value: number;
+  pct: number;
+  color: string;
+};
+
+type QueueHealthDatum = {
+  label: string;
+  value: number;
+  delta: number;
+  color: string;
+};
+
+const chartColors = ["#4D9DFF", "#2DD4BF", "#F5A524", "#8B5CF6", "#6F7D88"];
+
+const statusColors: Record<string, string> = {
+  "Needs Review": "#F5A524",
+  "Pending Review": "#F5A524",
+  "Brief Queued": "#4D9DFF",
+  "Brief Ready": "#8EEA45",
+  "Brief Failed": "#FF4D45",
+  Rejected: "#6F7D88",
+  Approved: "#7FA8FF",
+};
+
+const fallbackSectorBars: BarDatum[] = [
   { name: "Fintech", value: 72, color: "#4D9DFF" },
   { name: "Healthcare", value: 48, color: "#2DD4BF" },
   { name: "Insurance", value: 32, color: "#F5A524" },
   { name: "Legal", value: 21, color: "#8B5CF6" },
 ] as const;
 
-const roleBars = [
+const fallbackRoleBars: BarDatum[] = [
   { name: "Investment intelligence infrastructure", value: 68, color: "#4D9DFF", short: "Inv. Intel" },
   { name: "Clinical workflow support", value: 42, color: "#2DD4BF", short: "Clinical" },
   { name: "Claims automation", value: 28, color: "#F5A524", short: "Claims" },
   { name: "Compliance review automation", value: 22, color: "#8B5CF6", short: "Compliance" },
 ] as const;
 
-const dealTypes = [
+const fallbackDealTypes: BarDatum[] = [
   { name: "Acquisition", value: 78, color: "#4D9DFF" },
   { name: "Strategic Partnership", value: 46, color: "#2DD4BF" },
   { name: "Strategic Investment", value: 34, color: "#F5A524" },
   { name: "Product Launch / Off-Thesis", value: 15, color: "#8B5CF6" },
 ] as const;
 
-const geoBars = [
+const fallbackGeoBars: GeoDatum[] = [
   { name: "South Africa / Australia", value: 43, pct: 32, color: "#4D9DFF" },
   { name: "UK", value: 36, pct: 27, color: "#2DD4BF" },
   { name: "US", value: 33, pct: 24, color: "#F5A524" },
@@ -58,7 +96,7 @@ const briefsBars = [12, 14, 13, 16, 17, 18, 20];
 const priorBriefs = [8, 10, 11, 12, 13, 14, 16];
 const days = ["Jul 10", "Jul 11", "Jul 12", "Jul 13", "Jul 14", "Jul 15", "Jul 16"];
 
-const queueHealth = [
+const fallbackQueueHealth: QueueHealthDatum[] = [
   { label: "Pending Review", value: 14, delta: 2, color: "#F5A524" },
   { label: "Brief Queued", value: 6, delta: 0, color: "#4D9DFF" },
   { label: "Brief Ready", value: 5, delta: 1, color: "#8EEA45" },
@@ -107,7 +145,156 @@ const auditEvents = [
   },
 ] as const;
 
+function buildDashboardView(insights: DashboardInsights | undefined) {
+  if (!insights) {
+    return {
+      kpis: {
+        totalCandidates: "127",
+        approvedBriefs: "24",
+        pendingReview: "14",
+        briefReady: "5",
+        averageSourceConfidence: "78",
+        averageThesisFit: "83",
+      },
+      sectorBars: fallbackSectorBars,
+      roleBars: fallbackRoleBars,
+      dealTypes: fallbackDealTypes,
+      dealTypeTotal: 173,
+      geoBars: fallbackGeoBars,
+      candidatesOverTime,
+      priorCandidates,
+      candidateTrendLabels: days,
+      briefsBars,
+      priorBriefs,
+      briefTrendLabels: days,
+      insights: [
+        "Fintech acquisitions show the highest thesis-fit (avg. 88), outperforming other sectors. Review high-scoring fintech acquisitions in the queue.",
+        "Healthcare partnerships have the lowest source confidence (avg. 72) and highest manual review rate. Allocate more analyst time for healthcare.",
+        "Insurance has the fastest brief turnaround (avg. 18h from scan to brief ready). Leverage this benchmark to improve other sectors.",
+      ],
+      queueHealth: fallbackQueueHealth,
+      operationalScanRuns,
+      operationalBriefRuns,
+      queueAging,
+      auditEvents,
+    };
+  }
+
+  const sectorBars = toBars(insights.distributions.sectors);
+  const roleBars = toBars(insights.distributions.aiRoles).map((item) => ({
+    ...item,
+    short: abbreviate(item.name),
+  }));
+  const dealTypes = toBars(insights.distributions.dealTypes);
+  const geoBars = insights.distributions.geographies.map((item, index) => ({
+    name: item.label,
+    value: item.value,
+    pct: item.percentage,
+    color: chartColors[index % chartColors.length],
+  }));
+  const candidateTrend = normalizeTrend(insights.trends.candidates, candidatesOverTime);
+  const briefTrend = normalizeTrend(insights.trends.approvedBriefs, briefsBars);
+
+  return {
+    kpis: {
+      totalCandidates: String(insights.kpis.totalCandidates),
+      approvedBriefs: String(insights.kpis.approvedBriefs),
+      pendingReview: String(insights.kpis.pendingReview),
+      briefReady: String(insights.kpis.briefReady),
+      averageSourceConfidence: String(insights.kpis.averageSourceConfidence),
+      averageThesisFit: String(insights.kpis.averageThesisFit),
+    },
+    sectorBars,
+    roleBars,
+    dealTypes,
+    dealTypeTotal: Math.max(
+      1,
+      insights.distributions.dealTypes.reduce((sum, item) => sum + item.value, 0),
+    ),
+    geoBars,
+    candidatesOverTime: candidateTrend.values,
+    priorCandidates: candidateTrend.prior,
+    candidateTrendLabels: candidateTrend.labels,
+    briefsBars: briefTrend.values,
+    priorBriefs: briefTrend.prior,
+    briefTrendLabels: briefTrend.labels,
+    insights: insights.insights.length > 0 ? insights.insights : ["Seeded Convex data is ready for review."],
+    queueHealth: insights.queueHealth
+      .filter((item) => item.label !== "Approved")
+      .map((item) => ({
+        label: item.label === "Needs Review" ? "Pending Review" : item.label,
+        value: item.value,
+        delta: item.delta,
+        color: statusColors[item.label] ?? "#7FA8FF",
+      })),
+    operationalScanRuns: insights.operationalRuns.scans,
+    operationalBriefRuns: insights.operationalRuns.briefs,
+    queueAging: insights.queueAging.map((item, index) => {
+      const total = Math.max(1, insights.queueAging.reduce((sum, row) => sum + row.value, 0));
+      return {
+        ...item,
+        pct: Math.round((item.value / total) * 100),
+        color: ["#8EEA45", "#F5A524", "#FF4D45"][index] ?? "#6F7D88",
+      };
+    }),
+    auditEvents: insights.auditEvents.map((event) => ({
+      who: event.action
+        .split(" ")
+        .map((word) => word.charAt(0))
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+      action: event.action,
+      target: event.target,
+      when: event.when,
+    })),
+  };
+}
+
+function toBars(rows: readonly { label: string; value: number }[]): BarDatum[] {
+  return rows.map((item, index) => ({
+    name: item.label,
+    value: item.value,
+    color: chartColors[index % chartColors.length],
+  }));
+}
+
+function normalizeTrend(
+  rows: readonly { label: string; value: number }[],
+  fallbackValues: number[],
+) {
+  if (rows.length === 0) {
+    return {
+      values: fallbackValues,
+      prior: fallbackValues.map((value) => Math.max(1, Math.round(value * 0.75))),
+      labels: days,
+    };
+  }
+
+  const paddedRows = rows.length >= 2 ? rows : [...rows, { label: "Next", value: rows[0]?.value ?? 0 }];
+  const values = paddedRows.map((item) => item.value);
+  return {
+    values,
+    prior: values.map((value) => Math.max(0, Math.round(value * 0.75))),
+    labels: paddedRows.map((item) => item.label),
+  };
+}
+
+function abbreviate(value: string) {
+  const words = value.split(" ").filter(Boolean);
+  if (words.length <= 2) {
+    return value;
+  }
+  return words
+    .slice(0, 2)
+    .map((word) => word.replace(/[^A-Za-z]/g, "").slice(0, 4))
+    .join(" ");
+}
+
 function Dashboard() {
+  const insights = useQuery(api.dashboard.getInsights, {});
+  const view = buildDashboardView(insights);
+
   return (
     <AppShell
       title="Dashboard"
@@ -116,14 +303,14 @@ function Dashboard() {
     >
       <div className="space-y-5">
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <KPI icon={Users} label="Total Candidates" value="127" delta={19} tone="info" />
-          <KPI icon={CheckCircle2} label="Approved Briefs" value="24" delta={26} tone="success" />
-          <KPI icon={Clock} label="Pending Review" value="14" delta={-7} tone="warning" />
-          <KPI icon={Target} label="Brief Ready" value="5" delta={25} tone="info" />
+          <KPI icon={Users} label="Total Candidates" value={view.kpis.totalCandidates} delta={19} tone="info" />
+          <KPI icon={CheckCircle2} label="Approved Briefs" value={view.kpis.approvedBriefs} delta={26} tone="success" />
+          <KPI icon={Clock} label="Pending Review" value={view.kpis.pendingReview} delta={-7} tone="warning" />
+          <KPI icon={Target} label="Brief Ready" value={view.kpis.briefReady} delta={25} tone="info" />
           <KPI
             icon={ShieldCheck}
             label="Avg. Source Conf."
-            value="78"
+            value={view.kpis.averageSourceConfidence}
             delta={6}
             tone="info"
             unit="pts"
@@ -131,7 +318,7 @@ function Dashboard() {
           <KPI
             icon={Target}
             label="Avg. Thesis-Fit"
-            value="83"
+            value={view.kpis.averageThesisFit}
             delta={4}
             tone="success"
             unit="pts"
@@ -143,23 +330,23 @@ function Dashboard() {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
               <ChartPanel
                 title="Adoption by Sector"
-                footer="Fintech leads in adoption volume, driven by acquisitions."
+                footer={`${view.sectorBars[0]?.name ?? "Tracked sectors"} leads current adoption volume.`}
               >
-                <BarChart data={sectorBars} labels={sectorBars.map((item) => item.name)} />
+                <BarChart data={view.sectorBars} labels={view.sectorBars.map((item) => item.name)} />
               </ChartPanel>
 
               <ChartPanel
                 title="Counts by Deal Type"
                 footer="Acquisitions represent nearly half of all adoption events."
               >
-                <DonutLegend data={dealTypes} total={173} />
+                <DonutLegend data={view.dealTypes} total={view.dealTypeTotal} />
               </ChartPanel>
 
               <ChartPanel
                 title="Geography Breakdown"
                 footer="Activity concentrated in SA/AU, UK, and US markets."
               >
-                <HBarChart data={geoBars} />
+                <HBarChart data={view.geoBars} />
               </ChartPanel>
             </div>
 
@@ -168,7 +355,7 @@ function Dashboard() {
                 title="AI Role Distribution"
                 footer="Investment intelligence and clinical workflow lead AI role adoption."
               >
-                <BarChart data={roleBars} labels={roleBars.map((item) => item.short)} />
+                <BarChart data={view.roleBars} labels={view.roleBars.map((item) => item.short ?? item.name)} />
               </ChartPanel>
 
               <ChartPanel
@@ -188,9 +375,9 @@ function Dashboard() {
                 }
               >
                 <LineChart
-                  current={candidatesOverTime}
-                  prior={priorCandidates}
-                  labels={days}
+                  current={view.candidatesOverTime}
+                  prior={view.priorCandidates}
+                  labels={view.candidateTrendLabels}
                   color="#4D9DFF"
                 />
               </ChartPanel>
@@ -213,9 +400,9 @@ function Dashboard() {
                 }
               >
                 <BarComparison
-                  current={briefsBars}
-                  prior={priorBriefs}
-                  labels={days}
+                  current={view.briefsBars}
+                  prior={view.priorBriefs}
+                  labels={view.briefTrendLabels}
                   color="#8EEA45"
                 />
               </ChartPanel>
@@ -225,11 +412,7 @@ function Dashboard() {
               <Panel>
                 <PanelHeader title="Key Insights" icon={Lightbulb} />
                 <div className="grid grid-cols-1 gap-4 px-4 pb-4 sm:px-5 sm:pb-5 md:grid-cols-2 lg:grid-cols-3">
-                  {[
-                    "Fintech acquisitions show the highest thesis-fit (avg. 88), outperforming other sectors. Review high-scoring fintech acquisitions in the queue.",
-                    "Healthcare partnerships have the lowest source confidence (avg. 72) and highest manual review rate. Allocate more analyst time for healthcare.",
-                    "Insurance has the fastest brief turnaround (avg. 18h from scan to brief ready). Leverage this benchmark to improve other sectors.",
-                  ].map((copy, index) => (
+                  {view.insights.map((copy, index) => (
                     <div key={index}>
                       <div
                         className="mb-2 flex h-6 w-6 items-center justify-center rounded-full mono text-[10.5px] font-semibold"
@@ -251,7 +434,7 @@ function Dashboard() {
                 <PanelHeader title="Queue Health Summary" icon={Activity} />
                 <div className="px-4 pb-4 sm:px-5 sm:pb-5">
                   <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    {queueHealth.map((item) => (
+                    {view.queueHealth.map((item) => (
                       <div
                         key={item.label}
                         className="rounded-md border border-hairline-soft bg-surface-2/40 p-2.5"
@@ -292,7 +475,7 @@ function Dashboard() {
                   <div className="mono mb-2 text-[10.5px] uppercase tracking-[0.14em] text-text-muted">
                     Scan Runs
                   </div>
-                  {operationalScanRuns.map((run) => (
+                  {view.operationalScanRuns.map((run) => (
                     <RunLine key={run.id} {...run} />
                   ))}
                 </div>
@@ -300,7 +483,7 @@ function Dashboard() {
                   <div className="mono mb-2 text-[10.5px] uppercase tracking-[0.14em] text-text-muted">
                     Brief Runs
                   </div>
-                  {operationalBriefRuns.map((run) => (
+                  {view.operationalBriefRuns.map((run) => (
                     <RunLine key={run.id} {...run} />
                   ))}
                 </div>
@@ -313,7 +496,7 @@ function Dashboard() {
                 action={<span className="mono text-[10.5px]">As of now</span>}
               />
               <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
-                {queueAging.map((item) => (
+                {view.queueAging.map((item) => (
                   <div key={item.label}>
                     <div className="mb-1 flex items-center justify-between gap-3 text-[11px]">
                       <span>{item.label}</span>
@@ -347,7 +530,7 @@ function Dashboard() {
                 action={<span className="mono text-[10.5px]">All Time</span>}
               />
               <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
-                {auditEvents.map((event) => (
+                {view.auditEvents.map((event) => (
                   <div key={`${event.who}-${event.when}`} className="flex items-start gap-2.5">
                     <div
                       className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full mono text-[9px] font-semibold"

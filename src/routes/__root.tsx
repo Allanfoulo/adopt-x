@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ConvexProvider } from "convex/react";
 import {
   Outlet,
   Link,
@@ -11,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { ToastProvider } from "@/components/app-toast";
+import { convexClient } from "@/lib/convex-client";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -113,9 +115,11 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <Outlet />
-      </ToastProvider>
+      <ConvexProvider client={convexClient}>
+        <ToastProvider>
+          <Outlet />
+        </ToastProvider>
+      </ConvexProvider>
     </QueryClientProvider>
   );
 }

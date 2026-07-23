@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import {
   CheckCircle2,
   ChevronDown,
@@ -25,13 +27,97 @@ import {
   statusStyles,
 } from "@/components/app-shell";
 import { useToast } from "@/components/app-toast";
+import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [{ title: "Overview - Adopt X" }] }),
   component: Overview,
 });
 
-const queueSummary = [
+type OverviewSummary = FunctionReturnType<typeof api.overview.getSummary>;
+
+type QueueSummaryItem = {
+  label: string;
+  value: number;
+  color: string;
+};
+
+type TopRunCard = {
+  title: string;
+  status: string;
+  timestamp: string;
+  cta: string;
+};
+
+type SectorDistributionItem = {
+  label: string;
+  value: number;
+  color: string;
+  width: string;
+};
+
+type NeedsAttentionRow = {
+  id: string;
+  company: string;
+  target: string;
+  logoLetter: string;
+  logoColor: string;
+  issue: string;
+  status: string;
+  age: string;
+};
+
+type RecentApprovalRow = {
+  id: string;
+  company: string;
+  target: string;
+  logoLetter: string;
+  logoColor: string;
+  approvedBy: string;
+  time: string;
+};
+
+type RecentQueueActivityRow = {
+  time: string;
+  company: string;
+  target: string;
+  sector: string;
+  dealType: string;
+  status: "Pending Review" | "Brief Queued" | "Brief Ready" | "Rejected" | "Approved";
+  assignedTo: string;
+};
+
+type OperationalRunRow = {
+  id: string;
+  type: string;
+  status: "Completed" | "Failed" | "Running" | string;
+  started: string;
+  duration: string;
+};
+
+type AuditTrailEntry = {
+  actor: string;
+  initials: string;
+  action: string;
+  target: string;
+  detail: string;
+  when: string;
+  system?: boolean;
+};
+
+const statusColors: Record<string, string> = {
+  "Pending Review": "#F5A524",
+  "Needs Review": "#F5A524",
+  "Brief Queued": "#FFD248",
+  "Brief Ready": "#8EEA45",
+  Rejected: "#FF5E4A",
+  Approved: "#7FA8FF",
+  "Brief Failed": "#FF5E4A",
+};
+
+const sectorColors = ["#63D7D8", "#BB73FF", "#F5C243", "#B7F137", "#7FA8FF"];
+
+const fallbackQueueSummary: QueueSummaryItem[] = [
   { label: "Pending Review", value: 14, color: "#F5A524" },
   { label: "Brief Queued", value: 6, color: "#FFD248" },
   { label: "Brief Ready", value: 5, color: "#8EEA45" },
@@ -39,7 +125,7 @@ const queueSummary = [
   { label: "Approved", value: 18, color: "#7FA8FF" },
 ] as const;
 
-const topRunCards = [
+const fallbackTopRunCards: TopRunCard[] = [
   {
     title: "Latest Scan",
     status: "Completed",
@@ -54,14 +140,14 @@ const topRunCards = [
   },
 ] as const;
 
-const sectorDistribution = [
+const fallbackSectorDistribution: SectorDistributionItem[] = [
   { label: "Fintech", value: 16, color: "#63D7D8", width: "78%" },
   { label: "Healthcare", value: 13, color: "#BB73FF", width: "72%" },
   { label: "Insurance", value: 9, color: "#F5C243", width: "58%" },
   { label: "Legal", value: 7, color: "#B7F137", width: "44%" },
 ] as const;
 
-const needsAttentionRows = [
+const fallbackNeedsAttentionRows: NeedsAttentionRow[] = [
   {
     id: "na_001",
     company: "HealthPlus",
@@ -114,7 +200,7 @@ const needsAttentionRows = [
   },
 ] as const;
 
-const recentApprovals = [
+const fallbackRecentApprovals: RecentApprovalRow[] = [
   {
     id: "ap_001",
     company: "MediAxis",
@@ -162,7 +248,7 @@ const recentApprovals = [
   },
 ] as const;
 
-const recentQueueActivity = [
+const fallbackRecentQueueActivity: RecentQueueActivityRow[] = [
   {
     time: "10 min ago",
     company: "HealthPlus",
@@ -210,13 +296,7 @@ const recentQueueActivity = [
   },
 ] as const;
 
-const operationalRuns: {
-  id: string;
-  type: string;
-  status: "Completed" | "Failed" | "Running";
-  started: string;
-  duration: string;
-}[] = [
+const fallbackOperationalRuns: OperationalRunRow[] = [
   {
     id: "scan_001",
     type: "Full Scan",
@@ -261,7 +341,7 @@ const operationalActivity = [
   { label: "Approval queue refreshed", meta: "queue_007", when: "08:44 AM" },
 ] as const;
 
-const auditTrail = [
+const fallbackAuditTrail: AuditTrailEntry[] = [
   {
     actor: "Maya Patel",
     initials: "MP",
@@ -304,19 +384,13 @@ const auditTrail = [
     when: "Today, 09:05 AM",
     system: true,
   },
-] satisfies readonly {
-  actor: string;
-  initials: string;
-  action: string;
-  target: string;
-  detail: string;
-  when: string;
-  system?: boolean;
-}[];
+];
 
 function Overview() {
   const { loading, updateToast, info, error } = useToast();
   const [runsTab, setRunsTab] = useState<"Runs" | "Activity">("Runs");
+  const summary = useQuery(api.overview.getSummary, {});
+  const view = buildOverviewView(summary);
 
   const startScan = () => {
     const toastId = loading({
@@ -362,20 +436,20 @@ function Overview() {
     >
       <div className="space-y-5">
         <section className="grid gap-3 xl:grid-cols-[minmax(0,1.65fr)_minmax(0,0.72fr)_minmax(0,0.76fr)_minmax(0,1.42fr)]">
-          <QueueSummaryCard />
-          {topRunCards.map((card) => (
+          <QueueSummaryCard items={view.queueSummary} />
+          {view.topRunCards.map((card) => (
             <OverviewRunStatusCard key={card.title} {...card} />
           ))}
-          <SectorDistributionCard />
+          <SectorDistributionCard items={view.sectorDistribution} />
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.48fr)] 2xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="space-y-5">
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <NeedsAttentionTable />
-              <RecentApprovalsTable />
+              <NeedsAttentionTable rows={view.needsAttentionRows} />
+              <RecentApprovalsTable rows={view.recentApprovals} />
             </div>
-            <RecentQueueActivityTable />
+            <RecentQueueActivityTable rows={view.recentQueueActivity} />
           </div>
 
           <div className="space-y-4">
@@ -383,15 +457,113 @@ function Overview() {
               activeTab={runsTab}
               onTabChange={setRunsTab}
               onRunClick={handleRunClick}
+              rows={view.operationalRuns}
             />
-            <OverviewAuditTrailPanel />
+            <OverviewAuditTrailPanel entries={view.auditTrail} />
           </div>
         </section>
 
-        <OverviewFooterBar />
+        <OverviewFooterBar refreshLabel={view.refreshLabel} />
       </div>
     </AppShell>
   );
+}
+
+function buildOverviewView(summary: OverviewSummary | undefined) {
+  if (!summary) {
+    return {
+      queueSummary: fallbackQueueSummary,
+      topRunCards: fallbackTopRunCards,
+      sectorDistribution: fallbackSectorDistribution,
+      needsAttentionRows: fallbackNeedsAttentionRows,
+      recentApprovals: fallbackRecentApprovals,
+      recentQueueActivity: fallbackRecentQueueActivity,
+      operationalRuns: fallbackOperationalRuns,
+      auditTrail: fallbackAuditTrail,
+      refreshLabel: "Today, 09:12 AM",
+    };
+  }
+
+  const maxSectorValue = Math.max(...summary.sectorDistribution.map((item) => item.value), 1);
+
+  return {
+    queueSummary: summary.queueCounts
+      .filter((item) => item.label !== "Brief Failed")
+      .map((item) => ({
+        label: item.label === "Needs Review" ? "Pending Review" : item.label,
+        value: item.value,
+        color: statusColors[item.label] ?? "#7FA8FF",
+      })),
+    topRunCards: [
+      {
+        title: "Latest Scan",
+        status: summary.latestScan?.status ?? "Empty",
+        timestamp: summary.latestScan?.timestamp ?? "No scan yet",
+        cta: "View Scans",
+      },
+      {
+        title: "Latest Brief Generation",
+        status: summary.latestBriefGeneration?.status ?? "Empty",
+        timestamp: summary.latestBriefGeneration?.timestamp ?? "No brief run yet",
+        cta: "View Briefs",
+      },
+    ],
+    sectorDistribution: summary.sectorDistribution.slice(0, 4).map((item, index) => ({
+      label: item.label,
+      value: item.value,
+      color: sectorColors[index % sectorColors.length],
+      width: `${Math.max(16, Math.round((item.value / maxSectorValue) * 100))}%`,
+    })),
+    needsAttentionRows: summary.needsAttention.map((row) => ({
+      id: row.id,
+      company: row.company,
+      target: row.target,
+      logoLetter: row.company.charAt(0),
+      logoColor: logoColorFor(row.company),
+      issue: row.issue,
+      status: row.status,
+      age: row.age,
+    })),
+    recentApprovals: summary.recentApprovals.map((row) => ({
+      id: row.id,
+      company: row.company,
+      target: row.target,
+      logoLetter: row.company.charAt(0),
+      logoColor: logoColorFor(row.company),
+      approvedBy: row.approvedBy,
+      time: row.time,
+    })),
+    recentQueueActivity: summary.recentQueueActivity.map((row) => ({
+      ...row,
+      status: normalizeQueueStatus(row.status),
+    })),
+    operationalRuns: summary.operationalRuns,
+    auditTrail: summary.auditTrail.map((entry) => ({
+      actor: entry.actor,
+      initials: entry.initials,
+      action: entry.action,
+      target: entry.detail,
+      detail: "",
+      when: entry.when,
+      system: entry.actor === "System",
+    })),
+    refreshLabel: summary.refresh.label,
+  };
+}
+
+function normalizeQueueStatus(status: string): RecentQueueActivityRow["status"] {
+  if (status === "Needs Review") {
+    return "Pending Review";
+  }
+  if (
+    status === "Brief Queued" ||
+    status === "Brief Ready" ||
+    status === "Rejected" ||
+    status === "Approved"
+  ) {
+    return status;
+  }
+  return "Pending Review";
 }
 
 function OverviewHeaderActions({ onStartScan }: { onStartScan: () => void }) {
@@ -429,7 +601,13 @@ function OverviewHeaderActions({ onStartScan }: { onStartScan: () => void }) {
   );
 }
 
-function QueueSummaryCard() {
+function logoColorFor(name: string) {
+  const colors = ["#D9D2C6", "#FF7A66", "#87A89A", "#F4F6FB", "#5DD7D4", "#8A4BFF"];
+  const index = name.charCodeAt(0) % colors.length;
+  return colors[index];
+}
+
+function QueueSummaryCard({ items }: { items: QueueSummaryItem[] }) {
   return (
     <Panel className="px-4 py-4 sm:px-5">
       <div className="flex items-center gap-2">
@@ -437,7 +615,7 @@ function QueueSummaryCard() {
         <Info className="h-3.5 w-3.5 text-text-muted" />
       </div>
       <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-5">
-        {queueSummary.map((item) => (
+        {items.map((item) => (
           <div key={item.label}>
             <div className="mono text-[20px] leading-none" style={{ color: item.color }}>
               {item.value}
@@ -484,7 +662,7 @@ function OverviewRunStatusCard({
   );
 }
 
-function SectorDistributionCard() {
+function SectorDistributionCard({ items }: { items: SectorDistributionItem[] }) {
   return (
     <Panel className="px-4 py-4 sm:px-5">
       <div className="flex items-center gap-2">
@@ -492,7 +670,7 @@ function SectorDistributionCard() {
         <Info className="h-3.5 w-3.5 text-text-muted" />
       </div>
       <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-        {sectorDistribution.map((item) => (
+        {items.map((item) => (
           <div key={item.label}>
             <div className="h-[3px] overflow-hidden rounded-full bg-white/8">
               <div
@@ -511,12 +689,12 @@ function SectorDistributionCard() {
   );
 }
 
-function NeedsAttentionTable() {
+function NeedsAttentionTable({ rows }: { rows: NeedsAttentionRow[] }) {
   return (
     <Panel className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-4 sm:px-5">
         <div className="text-[12px] font-semibold tracking-tight text-text-primary">
-          Needs Attention <span className="text-text-secondary">(7)</span>
+          Needs Attention <span className="text-text-secondary">({rows.length})</span>
         </div>
         <button type="button" className="text-[10.5px] text-info hover:text-lime">
           View all
@@ -533,7 +711,7 @@ function NeedsAttentionTable() {
             </tr>
           </thead>
           <tbody>
-            {needsAttentionRows.map((row) => (
+            {rows.map((row) => (
               <tr key={row.id} className="border-t border-hairline-soft">
                 <td className="px-4 py-3 sm:px-5">
                   <div className="flex items-start gap-3">
@@ -573,7 +751,7 @@ function NeedsAttentionTable() {
   );
 }
 
-function RecentApprovalsTable() {
+function RecentApprovalsTable({ rows }: { rows: RecentApprovalRow[] }) {
   return (
     <Panel className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-4 sm:px-5">
@@ -595,7 +773,7 @@ function RecentApprovalsTable() {
             </tr>
           </thead>
           <tbody>
-            {recentApprovals.map((row) => (
+            {rows.map((row) => (
               <tr key={row.id} className="border-t border-hairline-soft">
                 <td className="px-4 py-3 sm:px-5">
                   <div className="flex items-start gap-3">
@@ -627,7 +805,7 @@ function RecentApprovalsTable() {
   );
 }
 
-function RecentQueueActivityTable() {
+function RecentQueueActivityTable({ rows }: { rows: RecentQueueActivityRow[] }) {
   return (
     <Panel className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-4 sm:px-5">
@@ -651,7 +829,7 @@ function RecentQueueActivityTable() {
             </tr>
           </thead>
           <tbody>
-            {recentQueueActivity.map((row) => (
+            {rows.map((row) => (
               <tr key={`${row.company}-${row.time}`} className="border-t border-hairline-soft">
                 <td className="px-4 py-3 text-[10px] text-text-secondary sm:px-5">{row.time}</td>
                 <td className="py-3 pr-4">
@@ -684,10 +862,12 @@ function OperationalRunsPanel({
   activeTab,
   onTabChange,
   onRunClick,
+  rows,
 }: {
   activeTab: "Runs" | "Activity";
   onTabChange: (tab: "Runs" | "Activity") => void;
   onRunClick: (status: string, id: string) => void;
+  rows: OperationalRunRow[];
 }) {
   return (
     <Panel className="overflow-hidden">
@@ -733,7 +913,7 @@ function OperationalRunsPanel({
                 </tr>
               </thead>
               <tbody>
-                {operationalRuns.map((row) => {
+                {rows.map((row) => {
                   const style = statusStyles[row.status] ?? statusStyles.Empty;
                   const Icon = style.icon;
                   return (
@@ -787,7 +967,7 @@ function OperationalRunsPanel({
   );
 }
 
-function OverviewAuditTrailPanel() {
+function OverviewAuditTrailPanel({ entries }: { entries: AuditTrailEntry[] }) {
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-4 sm:px-5">
@@ -799,7 +979,7 @@ function OverviewAuditTrailPanel() {
         </button>
       </div>
       <div className="space-y-4 px-4 py-4 sm:px-5">
-        {auditTrail.map((entry) => (
+        {entries.map((entry) => (
           <div key={`${entry.actor}-${entry.when}`} className="flex items-start gap-3">
             <div
               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${
@@ -837,13 +1017,13 @@ function OverviewAuditTrailPanel() {
   );
 }
 
-function OverviewFooterBar() {
+function OverviewFooterBar({ refreshLabel }: { refreshLabel: string }) {
   return (
     <Panel className="px-4 py-3 sm:px-5">
       <div className="flex flex-col gap-3 text-[10.5px] text-text-secondary sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span>
-            Last data refresh: <span className="text-text-primary">Today, 09:12 AM</span>
+            Last data refresh: <span className="text-text-primary">{refreshLabel}</span>
           </span>
           <button
             type="button"
