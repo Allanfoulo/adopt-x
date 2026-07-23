@@ -1,4 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import { makeFunctionReference } from "convex/server";
+import type { FunctionReference } from "convex/server";
 import { useMemo, useState } from "react";
 import {
   Activity,
@@ -36,7 +39,11 @@ type QueueStatus =
   | "Needs Review"
   | "Approved"
   | "Brief Queued"
-  | "Rejected";
+  | "Rejected"
+  | "Brief Failed"
+  | "New"
+  | "Normalized"
+  | "Scored";
 
 type TriageRow = {
   id: string;
@@ -55,16 +62,77 @@ type TriageRow = {
   logoLetter: string;
 };
 
-const desktopTabCounts = [
+type TriageTab = {
+  key: "All" | QueueStatus;
+  label: string;
+  count: number;
+};
+
+type SummaryRunCardData = {
+  label: string;
+  status: string;
+  time: string;
+  cta: string;
+};
+
+type QueueSummaryItem = {
+  label: string;
+  value: number;
+  color: string;
+};
+
+type RunRow = {
+  id: string;
+  status: string;
+  when: string;
+};
+
+type OperationalActivity = {
+  id: string;
+  label: string;
+  meta: string;
+  when: string;
+};
+
+type AuditTrailEntry = {
+  actor: string;
+  initials: string;
+  action: string;
+  target: string;
+  detail: string;
+  when: string;
+  system?: boolean;
+};
+
+type TriageQueue = {
+  tabs: { label: string; value: number }[];
+  rows: (Omit<TriageRow, "logoColor" | "logoLetter" | "status"> & {
+    status: string;
+    candidateId: string;
+  })[];
+  summaryCards: SummaryRunCardData[];
+  queueSummary: { label: string; value: number }[];
+  operationalRuns: {
+    runs: { scans: RunRow[]; briefs: RunRow[] };
+    activity: OperationalActivity[];
+  };
+  auditTrail: AuditTrailEntry[];
+  pagination: { showingStart: number; showingEnd: number; total: number };
+};
+
+const getTriageQueue: FunctionReference<"query", "public", { limit?: number }, TriageQueue> =
+  makeFunctionReference("triage:getQueue");
+
+const fallbackTabCounts: TriageTab[] = [
   { key: "All", label: "All", count: 45 },
   { key: "Needs Review", label: "Pending Review", count: 14 },
   { key: "Brief Queued", label: "Brief Queued", count: 6 },
   { key: "Brief Ready", label: "Brief Ready", count: 5 },
   { key: "Approved", label: "Approved", count: 18 },
   { key: "Rejected", label: "Rejected", count: 2 },
-] as const;
+];
 
-const triageRows: TriageRow[] = [
+const fallbackTriageRows: TriageRow[] = [
   {
     id: "dc_001",
     company: "Purple Group",
@@ -217,9 +285,9 @@ const desktopFilters = [
   "All Deal Types",
   "All Statuses",
   "All Source Classes",
-] as const;
+];
 
-const summaryCards = [
+const fallbackSummaryCards: SummaryRunCardData[] = [
   {
     label: "Latest Scan",
     status: "Completed",
@@ -232,17 +300,20 @@ const summaryCards = [
     time: "Started 08:40 AM",
     cta: "View runs",
   },
-] as const;
+];
 
-const queueSummary = [
+const fallbackQueueSummary: QueueSummaryItem[] = [
   { label: "Pending Review", value: 14, color: "#F5A524" },
   { label: "Brief Queued", value: 6, color: "#FFD248" },
   { label: "Brief Ready", value: 5, color: "#8EEA45" },
   { label: "Rejected", value: 2, color: "#FF5E4A" },
   { label: "Approved", value: 18, color: "#7FA8FF" },
-] as const;
+];
 
-const operationalRuns = {
+const fallbackOperationalRuns: {
+  runs: { scans: RunRow[]; briefs: RunRow[] };
+  activity: OperationalActivity[];
+} = {
   runs: {
     scans: [
       { id: "scan_001", status: "Completed", when: "08:32 AM" },
@@ -261,9 +332,9 @@ const operationalRuns = {
     { id: "evt_011", label: "Publisher check passed", meta: "dc_002", when: "08:58 AM" },
     { id: "evt_010", label: "Brief run queued", meta: "br_045", when: "08:40 AM" },
   ],
-} as const;
+};
 
-const auditTrail = [
+const fallbackAuditTrail: AuditTrailEntry[] = [
   {
     actor: "Maya Patel",
     initials: "MP",
@@ -305,28 +376,96 @@ const auditTrail = [
     when: "Today, 08:32 AM",
     system: true,
   },
-] satisfies readonly {
-  actor: string;
-  initials: string;
-  action: string;
-  target: string;
-  detail: string;
-  when: string;
-  system?: boolean;
-}[];
+];
+
+const queueSummaryColors: Record<string, string> = {
+  "Needs Review": "#F5A524",
+  "Brief Queued": "#FFD248",
+  "Brief Ready": "#8EEA45",
+  Rejected: "#FF5E4A",
+  Approved: "#7FA8FF",
+  "Brief Failed": "#FF5E4A",
+};
+
+function buildTriageView(queue: TriageQueue | undefined) {
+  if (!queue || queue.rows.length === 0) {
+    return {
+      tabs: fallbackTabCounts,
+      rows: fallbackTriageRows,
+      summaryCards: fallbackSummaryCards,
+      queueSummary: fallbackQueueSummary,
+      operationalRuns: fallbackOperationalRuns,
+      auditTrail: fallbackAuditTrail,
+      pagination: { showingStart: 1, showingEnd: 10, total: 45 },
+    };
+  }
+
+  const queueSummary = queue.queueSummary.map((item) => ({
+    label: displayQueueLabel(item.label),
+    value: item.value,
+    color: queueSummaryColors[item.label] ?? "#A9B4BE",
+  }));
+  const total = queueSummary.reduce((sum, item) => sum + item.value, 0);
+  const tabs: TriageTab[] = [
+    { key: "All", label: "All", count: total },
+    ...queue.queueSummary
+      .filter((item) => ["Needs Review", "Brief Queued", "Brief Ready", "Approved", "Rejected"].includes(item.label))
+      .map((item) => ({
+        key: item.label as QueueStatus,
+        label: displayQueueLabel(item.label),
+        count: item.value,
+      })),
+  ];
+
+  return {
+    tabs,
+    rows: queue.rows.map((row) => ({
+      id: row.id,
+      company: row.company,
+      target: row.target,
+      sector: row.sector,
+      geography: row.geography,
+      dealType: row.dealType,
+      aiRole: row.aiRole,
+      confidence: row.confidence,
+      thesisFit: row.thesisFit,
+      sourceConfidence: row.sourceConfidence,
+      published: row.published,
+      status: row.status as QueueStatus,
+      logoColor: logoColorFor(row.company),
+      logoLetter: row.company.charAt(0).toUpperCase(),
+    })),
+    summaryCards: queue.summaryCards,
+    queueSummary,
+    operationalRuns: queue.operationalRuns,
+    auditTrail: queue.auditTrail,
+    pagination: queue.pagination,
+  };
+}
+
+function displayQueueLabel(label: string) {
+  return label === "Needs Review" ? "Pending Review" : label;
+}
+
+function logoColorFor(name: string) {
+  const colors = ["#D9D2C6", "#FF7A66", "#87A89A", "#F4F6FB", "#5DD7D4", "#8A4BFF"];
+  const index = name.charCodeAt(0) % colors.length;
+  return colors[index];
+}
 
 function Triage() {
   const { success, warning, error, info, loading, updateToast } = useToast();
-  const [activeTab, setActiveTab] =
-    useState<(typeof desktopTabCounts)[number]["key"]>("All");
+  const queue = useQuery(getTriageQueue, {});
+  const view = buildTriageView(queue);
+  const [activeTab, setActiveTab] = useState<TriageTab["key"]>("All");
   const [selected, setSelected] = useState<Set<string>>(new Set(["dc_002", "dc_004"]));
   const [focusedRowId, setFocusedRowId] = useState("dc_002");
   const [railTab, setRailTab] = useState<"Runs" | "Activity">("Runs");
 
   const visibleRows = useMemo(() => {
-    if (activeTab === "All") return triageRows;
-    return triageRows.filter((row) => row.status === activeTab);
-  }, [activeTab]);
+    if (activeTab === "All") return view.rows;
+    return view.rows.filter((row) => row.status === activeTab);
+  }, [activeTab, view.rows]);
 
   const allVisibleSelected =
     visibleRows.length > 0 && visibleRows.every((row) => selected.has(row.id));
@@ -454,17 +593,17 @@ function Triage() {
     >
       <div className="space-y-5">
         <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.9fr)]">
-          {summaryCards.map((card) => (
+          {view.summaryCards.map((card) => (
             <SummaryRunCard key={card.label} {...card} />
           ))}
-          <QueueSummaryCard />
+          <QueueSummaryCard items={view.queueSummary} />
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_288px] 2xl:grid-cols-[minmax(0,1fr)_304px]">
           <Panel className="overflow-hidden">
             <div className="border-b border-hairline-soft px-4 pt-3 sm:px-5">
               <div className="flex flex-wrap items-center gap-5">
-                {desktopTabCounts.map((tab) => {
+                {view.tabs.map((tab) => {
                   const isActive = tab.key === activeTab;
                   return (
                     <button
@@ -648,8 +787,12 @@ function Triage() {
             <div className="border-t border-hairline-soft px-4 py-3 sm:px-5">
               <div className="grid gap-3 text-[10.5px] text-text-secondary lg:grid-cols-[1fr_auto_1fr] lg:items-center">
                 <div>
-                  Showing <span className="mono text-text-primary">1 to 10</span> of{" "}
-                  <span className="mono text-text-primary">45</span> results
+                  Showing{" "}
+                  <span className="mono text-text-primary">
+                    {view.pagination.showingStart} to {view.pagination.showingEnd}
+                  </span>{" "}
+                  of <span className="mono text-text-primary">{view.pagination.total}</span>{" "}
+                  results
                 </div>
                 <div className="flex items-center justify-start gap-1 lg:justify-center">
                   <PageButton>
@@ -706,18 +849,18 @@ function Triage() {
                 <div className="space-y-5 px-4 py-4 sm:px-5">
                   <RunSection
                     title="Scan Runs"
-                    rows={operationalRuns.runs.scans}
+                    rows={view.operationalRuns.runs.scans}
                     onRowClick={handleRunClick}
                   />
                   <RunSection
                     title="Brief Runs"
-                    rows={operationalRuns.runs.briefs}
+                    rows={view.operationalRuns.runs.briefs}
                     onRowClick={handleRunClick}
                   />
                 </div>
               ) : (
                 <div className="space-y-3 px-4 py-4 sm:px-5">
-                  {operationalRuns.activity.map((event) => (
+                  {view.operationalRuns.activity.map((event) => (
                     <div
                       key={event.id}
                       className="rounded-lg border border-hairline-soft bg-surface-2/40 px-3 py-2.5"
@@ -742,11 +885,11 @@ function Triage() {
               />
               <div className="px-4 pb-4 sm:px-5">
                 <div className="space-y-0">
-                  {auditTrail.map((entry, index) => (
+                  {view.auditTrail.map((entry, index) => (
                     <AuditItem
                       key={`${entry.actor}-${entry.when}`}
                       entry={entry}
-                      isLast={index === auditTrail.length - 1}
+                      isLast={index === view.auditTrail.length - 1}
                     />
                   ))}
                 </div>
@@ -823,12 +966,12 @@ function SummaryRunCard({
   );
 }
 
-function QueueSummaryCard() {
+function QueueSummaryCard({ items }: { items: QueueSummaryItem[] }) {
   return (
     <Panel className="px-4 py-4 sm:px-5">
       <div className="text-[10px] text-text-secondary">Queue Summary</div>
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
-        {queueSummary.map((item) => (
+        {items.map((item) => (
           <div key={item.label}>
             <div className="mono text-[20px] leading-none" style={{ color: item.color }}>
               {item.value}
@@ -1007,7 +1150,7 @@ function AuditItem({
   entry,
   isLast,
 }: {
-  entry: (typeof auditTrail)[number];
+  entry: AuditTrailEntry;
   isLast: boolean;
 }) {
   return (
