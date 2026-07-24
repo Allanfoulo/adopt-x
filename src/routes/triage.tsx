@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { FunctionReference } from "convex/server";
 import { useMemo, useState } from "react";
@@ -122,6 +122,18 @@ type TriageQueue = {
 
 const getTriageQueue: FunctionReference<"query", "public", { limit?: number }, TriageQueue> =
   makeFunctionReference("triage:getQueue");
+
+type ReviewCandidatesResult = {
+  updated: number;
+  skipped: number;
+};
+
+const reviewCandidates: FunctionReference<
+  "mutation",
+  "public",
+  { externalIds: string[]; action: "approve" | "reject"; reason?: string },
+  ReviewCandidatesResult
+> = makeFunctionReference("candidate:reviewCandidates");
 
 const fallbackTabCounts: TriageTab[] = [
   { key: "All", label: "All", count: 45 },
@@ -456,11 +468,13 @@ function logoColorFor(name: string) {
 function Triage() {
   const { success, warning, error, info, loading, updateToast } = useToast();
   const queue = useQuery(getTriageQueue, {});
+  const reviewSelectedCandidates = useMutation(reviewCandidates);
   const view = buildTriageView(queue);
   const [activeTab, setActiveTab] = useState<TriageTab["key"]>("All");
   const [selected, setSelected] = useState<Set<string>>(new Set(["dc_002", "dc_004"]));
   const [focusedRowId, setFocusedRowId] = useState("dc_002");
   const [railTab, setRailTab] = useState<"Runs" | "Activity">("Runs");
+  const [isReviewing, setIsReviewing] = useState(false);
 
   const visibleRows = useMemo(() => {
     if (activeTab === "All") return view.rows;
@@ -530,21 +544,63 @@ function Triage() {
 
   const approveSelected = () =>
     withSelectionGuard(() => {
-      success({
-        title: `${selectedCount} candidate${selectedCount === 1 ? "" : "s"} approved`,
-        description: "Moved into the brief-ready lane and added to the analyst review queue.",
-        action: { label: "Undo", emphasis: "secondary" },
-      });
+      void runBulkReviewAction("approve");
     });
 
   const rejectSelected = () =>
     withSelectionGuard(() => {
-      warning({
-        title: `${selectedCount} candidate${selectedCount === 1 ? "" : "s"} rejected`,
-        description: "The selected rows were removed from the active thesis-fit queue.",
-        action: { label: "Review reasons", emphasis: "secondary" },
-      });
+      void runBulkReviewAction("reject");
     });
+
+  const runBulkReviewAction = async (action: "approve" | "reject") => {
+    if (isReviewing) {
+      return;
+    }
+
+    const selectedIds = [...selected];
+    setIsReviewing(true);
+    try {
+      const result = await reviewSelectedCandidates({
+        externalIds: selectedIds,
+        action,
+        reason:
+          action === "approve"
+            ? "Approved from triage queue bulk action."
+            : "Rejected from triage queue bulk action.",
+      });
+      if (result.updated === 0) {
+        warning({
+          title: "No candidates updated",
+          description: "The selected rows could not be found in the current data set.",
+        });
+        return;
+      }
+
+      setSelected(new Set());
+      const skippedLabel =
+        result.skipped > 0 ? ` ${result.skipped} selected demo row${result.skipped === 1 ? " was" : "s were"} skipped.` : "";
+      if (action === "approve") {
+        success({
+          title: `${result.updated} candidate${result.updated === 1 ? "" : "s"} approved`,
+          description: `Moved into the approved lane.${skippedLabel}`,
+          action: { label: "Undo", emphasis: "secondary" },
+        });
+      } else {
+        warning({
+          title: `${result.updated} candidate${result.updated === 1 ? "" : "s"} rejected`,
+          description: `Removed from the active thesis-fit queue.${skippedLabel}`,
+          action: { label: "Review reasons", emphasis: "secondary" },
+        });
+      }
+    } catch (err) {
+      error({
+        title: "Bulk review failed",
+        description: err instanceof Error ? err.message : "Unable to update selected candidates.",
+      });
+    } finally {
+      setIsReviewing(false);
+    }
+  };
 
   const queueBriefs = () =>
     withSelectionGuard(() => {

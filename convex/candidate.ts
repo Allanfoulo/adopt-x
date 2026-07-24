@@ -1,11 +1,12 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   candidateStatusLabels,
   formatDateLabel,
   getDemoWorkspaceId,
   titleCase,
+  WORKSPACE_SLUG,
 } from "./model";
 
 export const getDetail = query({
@@ -128,6 +129,100 @@ export const getDetail = query({
       },
       tags: tagsFor(candidate, sources),
     };
+  },
+});
+
+export const reviewCandidates = mutation({
+  args: {
+    externalIds: v.array(v.string()),
+    action: v.union(v.literal("approve"), v.literal("reject")),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const workspace = await ctx.db
+      .query("workspaces")
+      .withIndex("by_slug", (q) => q.eq("slug", WORKSPACE_SLUG))
+      .unique();
+    if (!workspace) {
+      return { updated: 0, skipped: args.externalIds.length };
+    }
+
+    const actor = await ctx.db
+      .query("users")
+      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspace._id))
+      .filter((q) => q.eq(q.field("email"), "maya.patel@adoptx.local"))
+      .first();
+    const now = Date.now();
+    let updated = 0;
+    let skipped = 0;
+
+    for (const externalId of args.externalIds) {
+      const candidate = await ctx.db
+        .query("dealCandidates")
+        .withIndex("by_workspaceId_and_externalId", (q) =>
+          q.eq("workspaceId", workspace._id).eq("externalId", externalId),
+        )
+        .unique();
+
+      if (!candidate) {
+        skipped += 1;
+        continue;
+      }
+
+      const nextStatus = args.action === "approve" ? "approved" : "rejected";
+      const candidatePatch: Partial<Doc<"dealCandidates">> = {
+        status: nextStatus,
+        updatedAt: now,
+      };
+      if (args.action === "approve" && actor) {
+        candidatePatch.approvedByUserId = actor._id;
+      }
+      if (args.action === "reject") {
+        candidatePatch.rejectionReason = args.reason ?? "Rejected by analyst review.";
+        if (actor) {
+          candidatePatch.rejectedByUserId = actor._id;
+        }
+      }
+      await ctx.db.patch(candidate._id, candidatePatch);
+
+      const correlationId = `${args.action}_${candidate.externalId}_${now}`;
+      await ctx.db.insert("reviewAuditEvents", {
+        workspaceId: workspace._id,
+        candidateId: candidate._id,
+        actorType: actor ? "user" : "system",
+        actorUserId: actor?._id,
+        action: args.action === "approve" ? "approved candidate" : "rejected candidate",
+        before: candidateStatusLabels[candidate.status],
+        after: candidateStatusLabels[nextStatus],
+        reason:
+          args.action === "approve"
+            ? args.reason ?? "Approved from analyst review."
+            : args.reason ?? "Rejected by analyst review.",
+        correlationId,
+        createdAt: now,
+      });
+      await ctx.db.insert("domainEvents", {
+        workspaceId: workspace._id,
+        type: args.action === "approve" ? "candidate.approved" : "candidate.rejected",
+        version: 1,
+        aggregateType: "dealCandidate",
+        aggregateId: candidate._id,
+        correlationId,
+        actorType: actor ? "user" : "system",
+        actorId: actor?._id ?? "system",
+        data: JSON.stringify({
+          externalId: candidate.externalId,
+          company: candidate.company,
+          status: nextStatus,
+        }),
+        source: "adopt-x-ui",
+        createdAt: now,
+      });
+
+      updated += 1;
+    }
+
+    return { updated, skipped };
   },
 });
 

@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { FunctionReference } from "convex/server";
+import { useState } from "react";
 import { AppShell, Panel, StatusBadge, ToolbarButton } from "@/components/app-shell";
+import { useToast } from "@/components/app-toast";
 import {
   ArrowLeft,
   Bot,
@@ -111,6 +113,18 @@ const getCandidateDetail: FunctionReference<
   { externalId?: string },
   CandidateDetailData | null
 > = makeFunctionReference("candidate:getDetail");
+
+type ReviewCandidatesResult = {
+  updated: number;
+  skipped: number;
+};
+
+const reviewCandidates: FunctionReference<
+  "mutation",
+  "public",
+  { externalIds: string[]; action: "approve" | "reject"; reason?: string },
+  ReviewCandidatesResult
+> = makeFunctionReference("candidate:reviewCandidates");
 
 const heroFields = [
   { label: "Company", value: "MediAxis", tone: "teal", mark: "M" },
@@ -299,8 +313,52 @@ function buildCandidateView(detail: CandidateDetailData | null | undefined): Can
 }
 
 function CandidateDetail() {
+  const { success, error, warning } = useToast();
   const detail = useQuery(getCandidateDetail, { externalId: "dc_002" });
+  const reviewCandidate = useMutation(reviewCandidates);
+  const [isReviewing, setIsReviewing] = useState(false);
   const view = buildCandidateView(detail);
+
+  const runReviewAction = async (action: "approve" | "reject") => {
+    if (isReviewing) {
+      return;
+    }
+
+    setIsReviewing(true);
+    try {
+      const result = await reviewCandidate({
+        externalIds: [view.candidate.id],
+        action,
+        reason:
+          action === "approve"
+            ? "Approved from candidate detail review."
+            : "Rejected from candidate detail review.",
+      });
+      if (result.updated === 0) {
+        warning({
+          title: "No candidate updated",
+          description: "The selected candidate could not be found in the current data set.",
+        });
+        return;
+      }
+
+      success({
+        title: action === "approve" ? "Candidate approved" : "Candidate rejected",
+        description:
+          action === "approve"
+            ? `${view.candidate.company} moved into the approved lane.`
+            : `${view.candidate.company} was removed from the active review lane.`,
+      });
+    } catch (err) {
+      error({
+        title: "Review action failed",
+        description: err instanceof Error ? err.message : "Unable to update candidate status.",
+      });
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
   const actions = (
     <>
       <ToolbarButton icon={Edit3}>Edit Mode</ToolbarButton>
@@ -309,6 +367,9 @@ function CandidateDetail() {
         Save Changes
       </button>
       <button
+        type="button"
+        onClick={() => void runReviewAction("approve")}
+        disabled={isReviewing}
         className="inline-flex h-10 items-center gap-2 rounded-lg px-4 text-[12px] font-medium text-primary-foreground"
         style={{
           background: "linear-gradient(180deg, #C9FF54, #B7F137)",
@@ -319,6 +380,9 @@ function CandidateDetail() {
         <ThumbsUp className="h-4 w-4" strokeWidth={2.25} /> Approve
       </button>
       <button
+        type="button"
+        onClick={() => void runReviewAction("reject")}
+        disabled={isReviewing}
         className="inline-flex h-10 items-center gap-2 rounded-lg px-4 text-[12px] font-medium"
         style={{
           background: "rgba(255,77,69,0.10)",
