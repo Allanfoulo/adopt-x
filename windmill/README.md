@@ -1,0 +1,23 @@
+# Adopt X Windmill Pipeline
+
+Windmill owns source collection, scheduling, retries, and external connector credentials. Convex remains the system of record and Mastra remains the interpretation layer.
+
+## Initial flow
+
+1. Schedule `collectors/public_feed.ts` every 1-2 hours for configured feeds.
+2. Pass the returned items to `flows/scan_adoption_deals.ts`.
+3. The flow calls `ingest:ingestSourceBatch`, which is idempotent by external id and content hash.
+4. A downstream Mastra run normalizes candidates and scores AI-adoption relevance.
+5. Call `flows/research_candidate.ts` only for new, ambiguous, high-confidence, or approved candidates. Configure it to call `flows/last30days_runner.ts`.
+
+## Environment
+
+- `CONVEX_URL`: Adopt X Convex deployment URL.
+- `LAST30DAYS_RUNNER_URL`: authenticated Windmill or Mastra endpoint that wraps the last30days engine.
+- `LAST30DAYS_SKILL_DIR`: Windmill worker path containing `scripts/last30days.py`.
+- `LAST30DAYS_PYTHON`: optional Python executable path; defaults to `python3`.
+- Provider keys belong in Windmill resources/secrets, not in source files.
+
+## Source rollout
+
+Start with first-party RSS/Atom or stable public feeds. Add SEC/EDGAR, ASX, company IR pages, press-release wires, sector sources, and community sources as separate collectors. Keep community results marked as enrichment evidence; they do not establish that a deal occurred.
