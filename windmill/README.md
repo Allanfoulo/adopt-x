@@ -2,6 +2,8 @@
 
 Windmill owns source collection, scheduling, retries, and external connector credentials. Convex remains the system of record and Mastra remains the interpretation layer.
 
+This folder includes a `wmill.yaml` sync configuration. From a machine with the Windmill CLI installed, run `wmill workspace add`, bind the target workspace, and then use `wmill sync push` from this directory. The sync intentionally skips secrets; configure provider credentials and `CONVEX_URL` as Windmill resources/secrets in the workspace.
+
 ## Initial flow
 
 1. Schedule `collectors/public_feed.ts` every 1-2 hours for configured feeds.

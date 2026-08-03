@@ -1,0 +1,29 @@
+defaultTs: bun
+
+# Adopt X pipeline scripts and flows are kept under these two folders so the
+# project can be pushed once a Windmill workspace is bound.
+includes:
+  - collectors/**
+  - flows/**
+
+excludes: []
+extraIncludes: []
+codebases: []
+
+skipVariables: false
+skipResources: false
+skipResourceTypes: false
+skipSecrets: true
+skipScripts: false
+skipFlows: false
+skipApps: true
+skipFolders: false
+
+includeSchedules: true
+includeTriggers: true
+includeUsers: false
+includeGroups: false
+includeSettings: false
+includeKey: false
+
+workspaces: {}
