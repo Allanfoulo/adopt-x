@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
   CheckCircle2,
@@ -389,26 +389,38 @@ const fallbackAuditTrail: AuditTrailEntry[] = [
 function Overview() {
   const { loading, updateToast, info, error } = useToast();
   const [runsTab, setRunsTab] = useState<"Runs" | "Activity">("Runs");
+  const startScanAction = useAction(api.scans.start);
   const summary = useQuery(api.overview.getSummary, {});
   const view = buildOverviewView(summary);
 
-  const startScan = () => {
+  const startScan = async () => {
     const toastId = loading({
       title: "Scan started",
-      description: "Refreshing the operational summary from verified public deal sources.",
+      description: "Windmill is collecting verified public deal sources. The queue will update when ingestion finishes.",
       action: { label: "Dismiss", emphasis: "secondary" },
     });
 
-    window.setTimeout(() => {
+    try {
+      const result = await startScanAction({});
       updateToast(toastId, {
-        tone: "success",
-        title: "Overview refreshed",
-        description: "Latest queue counts and run summaries were updated from scan_001.",
+        tone: "info",
+        title: "Scan queued",
+        description: result.jobId
+          ? `Windmill job ${result.jobId} is collecting sources now.`
+          : "Windmill accepted the scan and is collecting sources now.",
         action: { label: "View scan" },
         duration: 5200,
         dismissible: true,
       });
-    }, 1400);
+    } catch (err) {
+      updateToast(toastId, {
+        tone: "error",
+        title: "Scan could not start",
+        description: err instanceof Error ? err.message : "Windmill could not be reached.",
+        duration: 9000,
+        dismissible: true,
+      });
+    }
   };
 
   const handleRunClick = (status: string, id: string) => {
@@ -566,7 +578,7 @@ function normalizeQueueStatus(status: string): RecentQueueActivityRow["status"] 
   return "Pending Review";
 }
 
-function OverviewHeaderActions({ onStartScan }: { onStartScan: () => void }) {
+function OverviewHeaderActions({ onStartScan }: { onStartScan: () => void | Promise<void> }) {
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto lg:gap-3">
       <div className="relative hidden sm:block">

@@ -15,6 +15,7 @@ import type * as ingest from "../ingest.js";
 import type * as model from "../model.js";
 import type * as overview from "../overview.js";
 import type * as research from "../research.js";
+import type * as scans from "../scans.js";
 import type * as triage from "../triage.js";
 
 import type {
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   model: typeof model;
   overview: typeof overview;
   research: typeof research;
+  scans: typeof scans;
   triage: typeof triage;
 }>;
 

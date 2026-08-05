@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { FunctionReference } from "convex/server";
 import { useMemo, useState } from "react";
@@ -122,6 +122,9 @@ type TriageQueue = {
 
 const getTriageQueue: FunctionReference<"query", "public", { limit?: number }, TriageQueue> =
   makeFunctionReference("triage:getQueue");
+
+const startScanReference: FunctionReference<"action", "public", {}, { jobId: string | null }> =
+  makeFunctionReference("scans:start");
 
 type ReviewCandidatesResult = {
   updated: number;
@@ -469,6 +472,7 @@ function Triage() {
   const { success, warning, error, info, loading, updateToast } = useToast();
   const queue = useQuery(getTriageQueue, {});
   const reviewSelectedCandidates = useMutation(reviewCandidates);
+  const startScanAction = useAction(startScanReference);
   const view = buildTriageView(queue);
   const [activeTab, setActiveTab] = useState<TriageTab["key"]>("All");
   const [selected, setSelected] = useState<Set<string>>(new Set(["dc_002", "dc_004"]));
@@ -522,24 +526,34 @@ function Triage() {
     callback();
   };
 
-  const startScan = () => {
+  const startScan = async () => {
     const toastId = loading({
       title: "Scan started",
-      description: "Scanning verified public sources for newly disclosed AI adoption deals.",
+      description: "Windmill is collecting verified public deal sources. The queue will update when ingestion finishes.",
       action: { label: "Dismiss", emphasis: "secondary" },
     });
 
-    window.setTimeout(() => {
+    try {
+      const result = await startScanAction({});
       updateToast(toastId, {
-        tone: "success",
-        title: "Scan completed",
-        description: "45 candidates created across 12 verified source clusters.",
+        tone: "info",
+        title: "Scan queued",
+        description: result.jobId
+          ? `Windmill job ${result.jobId} is collecting sources now.`
+          : "Windmill accepted the scan and is collecting sources now.",
         action: { label: "View scan" },
-        secondaryAction: { label: "Keep browsing" },
         duration: 5200,
         dismissible: true,
       });
-    }, 1600);
+    } catch (err) {
+      updateToast(toastId, {
+        tone: "error",
+        title: "Scan could not start",
+        description: err instanceof Error ? err.message : "Windmill could not be reached.",
+        duration: 9000,
+        dismissible: true,
+      });
+    }
   };
 
   const approveSelected = () =>
@@ -958,7 +972,7 @@ function Triage() {
   );
 }
 
-function TriageHeaderActions({ onStartScan }: { onStartScan: () => void }) {
+function TriageHeaderActions({ onStartScan }: { onStartScan: () => void | Promise<void> }) {
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto lg:gap-3">
       <div className="relative hidden sm:block">
