@@ -4,10 +4,24 @@ import { internal } from "./_generated/api";
 import {
   internalAction,
   internalMutation,
+  internalQuery,
   mutation,
   query,
 } from "./_generated/server";
 import { formatDateLabel, getDemoWorkspaceId, titleCase, WORKSPACE_SLUG } from "./model";
+
+const briefEnrichmentValidator = v.object({
+  executiveSummary: v.string(),
+  transactionOverview: v.string(),
+  strategicRationale: v.string(),
+  risks: v.array(v.string()),
+  marketImplications: v.string(),
+  keyTakeaways: v.array(v.string()),
+  dealStructure: v.string(),
+  confidenceScore: v.number(),
+  evidenceUsed: v.array(v.string()),
+  last30daysUsed: v.boolean(),
+});
 
 export const queue = mutation({
   args: { externalIds: v.array(v.string()) },
@@ -303,7 +317,13 @@ export const generateCandidate = internalAction({
   args: { briefRunId: v.id("briefRuns") },
   handler: async (ctx, args) => {
     try {
-      await ctx.runMutation(internal.briefs.completeCandidate, args);
+      const run = await ctx.runQuery(internal.briefs.getBriefRunForEnrichment, args);
+      if (!run) throw new Error("Brief run not found");
+      const enrichment = await generateBriefEnrichment(run);
+      await ctx.runMutation(internal.briefs.completeCandidate, {
+        briefRunId: args.briefRunId,
+        enrichment,
+      });
     } catch (error) {
       await ctx.runMutation(internal.briefs.failCandidate, {
         briefRunId: args.briefRunId,
@@ -314,7 +334,7 @@ export const generateCandidate = internalAction({
 });
 
 export const completeCandidate = internalMutation({
-  args: { briefRunId: v.id("briefRuns") },
+  args: { briefRunId: v.id("briefRuns"), enrichment: briefEnrichmentValidator },
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.briefRunId);
     if (!run || run.status === "completed") return;
@@ -347,27 +367,62 @@ export const completeCandidate = internalMutation({
       version,
       status: "generated",
       executiveSummary:
-        candidate.reasoningSummary ??
-        `${candidate.company} shows a ${titleCase(candidate.aiRole)} adoption signal requiring analyst review.`,
-      transactionOverview: `${titleCase(candidate.dealType)} involving ${candidate.company} and ${candidate.target || "an unidentified target"}.`,
-      strategicRationale: `The candidate indicates ${titleCase(candidate.aiRole)} adoption in ${titleCase(candidate.sector)} with a thesis-fit score of ${candidate.thesisFitScore}.`,
-      risks: [
-        candidate.target === "Unknown" ? "Target details require analyst confirmation." : "Transaction details require source validation.",
-        "Automated extraction requires analyst review before approval.",
-      ],
-      marketImplications: `This signal contributes to the ${titleCase(candidate.sector)} view of AI integration across existing operating models.`,
-      keyTakeaways: [
-        `AI role: ${titleCase(candidate.aiRole)}`,
-        `Source confidence: ${candidate.sourceConfidence}`,
-        `${sources.length} provenance source${sources.length === 1 ? "" : "s"} linked`,
-      ],
+        args.enrichment.executiveSummary,
+      transactionOverview: args.enrichment.transactionOverview,
+      strategicRationale: args.enrichment.strategicRationale,
+      risks: args.enrichment.risks,
+      marketImplications: args.enrichment.marketImplications,
+      keyTakeaways: args.enrichment.keyTakeaways,
+      dealStructure: args.enrichment.dealStructure,
       sourcesSnapshot: sources.map((source) => source._id),
-      confidenceScore: candidate.confidenceScore,
+      confidenceScore: args.enrichment.confidenceScore,
       createdAt: now,
       updatedAt: now,
     });
     await ctx.db.patch(candidate._id, { status: "brief_ready", briefId, updatedAt: now });
     await ctx.db.patch(args.briefRunId, { status: "completed", completedAt: now });
+  },
+});
+
+export const getBriefRunForEnrichment = internalQuery({
+  args: { briefRunId: v.id("briefRuns") },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.briefRunId);
+    if (!run) return null;
+    const candidate = await ctx.db.get(run.candidateId);
+    if (!candidate) return null;
+    const links = await ctx.db
+      .query("candidateSourceLinks")
+      .withIndex("by_workspaceId_and_candidateId", (q) =>
+        q.eq("workspaceId", run.workspaceId).eq("candidateId", candidate._id),
+      )
+      .take(20);
+    const sources = (await Promise.all(links.map((link) => ctx.db.get(link.sourceHitId)))).filter(
+      (source): source is Doc<"sourceHits"> => source !== null,
+    );
+    return {
+      candidate: {
+        externalId: candidate.externalId,
+        company: candidate.company,
+        target: candidate.target,
+        dealType: candidate.dealType,
+        sector: candidate.sector,
+        geography: candidate.geography,
+        aiRole: candidate.aiRole,
+        confidenceScore: candidate.confidenceScore,
+        thesisFitScore: candidate.thesisFitScore,
+        sourceConfidence: candidate.sourceConfidence,
+      },
+      sources: sources.map((source) => ({
+        publisher: source.publisher,
+        sourceType: source.sourceType,
+        sourceClass: source.sourceClass,
+        url: source.url,
+        headline: source.headline,
+        publishedAt: source.publishedAt,
+        rawExcerpt: source.rawExcerpt,
+      })),
+    };
   },
 });
 
@@ -389,6 +444,147 @@ async function getWorkspace(ctx: Parameters<typeof getDemoWorkspaceId>[0]) {
     .unique();
   if (!workspace) throw new Error(`Workspace '${WORKSPACE_SLUG}' has not been seeded`);
   return workspace;
+}
+
+type BriefEnrichmentInput = {
+  candidate: {
+    externalId: string;
+    company: string;
+    target: string;
+    dealType: string;
+    sector: string;
+    geography: string;
+    aiRole: string;
+    confidenceScore: number;
+    thesisFitScore: number;
+    sourceConfidence: number;
+  };
+  sources: {
+    publisher: string;
+    sourceType: string;
+    sourceClass: string;
+    url: string;
+    headline: string;
+    publishedAt: number;
+    rawExcerpt: string;
+  }[];
+};
+
+async function generateBriefEnrichment(input: BriefEnrichmentInput) {
+  const baseUrl = (process.env.MASTRA_URL ?? process.env.MASTRA_SERVER_URL)?.replace(/\/$/, "");
+  const agentId = process.env.MASTRA_BRIEF_AGENT_ID ?? "adopt-x-brief-enrichment-agent";
+  const token = process.env.MASTRA_API_TOKEN;
+  if (!baseUrl) {
+    throw new Error("Brief enrichment is not configured. Set MASTRA_URL in Convex.");
+  }
+
+  const response = await fetch(`${baseUrl}/api/agents/${encodeURIComponent(agentId)}/generate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: buildEnrichmentPrompt(input) }],
+      maxSteps: 8,
+      toolChoice: "auto",
+      tracingOptions: { traceName: "adopt-x-brief-enrichment" },
+    }),
+  });
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new Error(`Mastra brief enrichment failed (${response.status}): ${responseText.slice(0, 500)}`);
+  }
+
+  let body: { text?: string; object?: unknown; toolResults?: unknown[]; steps?: unknown[] };
+  try {
+    body = JSON.parse(responseText) as typeof body;
+  } catch {
+    throw new Error("Mastra brief enrichment returned invalid JSON.");
+  }
+  const parsed = parseEnrichmentJson(body.object ?? body.text);
+  if (!parsed) throw new Error("Mastra brief enrichment returned no JSON object.");
+  const toolPayload = JSON.stringify({ toolResults: body.toolResults, steps: body.steps });
+  const validated = validateBriefEnrichment(parsed);
+  return {
+    ...validated,
+    last30daysUsed: validated.last30daysUsed && /last30days/i.test(toolPayload),
+  };
+}
+
+function buildEnrichmentPrompt(input: BriefEnrichmentInput): string {
+  return [
+    "Generate an analyst-ready Adopt X brief from this candidate and its public evidence.",
+    "Use the last30days-research tool for secondary context when available, but never treat it as proof of the deal.",
+    "Return only valid JSON with exactly the requested keys. Do not use markdown.",
+    JSON.stringify({
+      executiveSummary: "string",
+      transactionOverview: "string",
+      strategicRationale: "string",
+      risks: ["string", "string"],
+      marketImplications: "string",
+      keyTakeaways: ["string", "string", "string"],
+      dealStructure: "string or Not available",
+      confidenceScore: 0,
+      evidenceUsed: ["source headline or URL"],
+      last30daysUsed: false,
+    }, null, 2),
+    "Candidate:",
+    JSON.stringify(input.candidate, null, 2),
+    "Sources:",
+    JSON.stringify(input.sources, null, 2),
+  ].join("\n\n");
+}
+
+function parseEnrichmentJson(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try {
+      const parsed = JSON.parse(match[0]);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function validateBriefEnrichment(value: Record<string, unknown>) {
+  const text = (key: string) => {
+    const result = value[key];
+    if (typeof result !== "string" || !result.trim()) throw new Error(`Mastra enrichment missing ${key}.`);
+    return result.trim();
+  };
+  const list = (key: string, min: number) => {
+    const result = value[key];
+    if (!Array.isArray(result) || result.length < min || result.some((item) => typeof item !== "string" || !item.trim())) {
+      throw new Error(`Mastra enrichment returned an invalid ${key} list.`);
+    }
+    return result.map((item) => String(item).trim());
+  };
+  const confidenceScore = value.confidenceScore;
+  if (typeof confidenceScore !== "number" || confidenceScore < 0 || confidenceScore > 100) {
+    throw new Error("Mastra enrichment returned an invalid confidenceScore.");
+  }
+  if (typeof value.last30daysUsed !== "boolean") throw new Error("Mastra enrichment missing last30daysUsed.");
+  return {
+    executiveSummary: text("executiveSummary"),
+    transactionOverview: text("transactionOverview"),
+    strategicRationale: text("strategicRationale"),
+    risks: list("risks", 2),
+    marketImplications: text("marketImplications"),
+    keyTakeaways: list("keyTakeaways", 3),
+    dealStructure: text("dealStructure"),
+    confidenceScore,
+    evidenceUsed: list("evidenceUsed", 1),
+    last30daysUsed: value.last30daysUsed,
+  };
 }
 
 function getLogoColor(sector: string): string {
