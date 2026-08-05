@@ -1,0 +1,7 @@
+{
+  "version": "4",
+  "remote": {
+    "http://localhost:33577/api/scripts_u/empty_ts/tmp/windmill/wk-default-dcd1127d1a84-4blkz/019fd211-a43d-9aef-8fcb-81efdf26efb0/scan_adoption_deals.ts": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "http://localhost:33577/api/scripts_u/empty_ts/tmp/windmill/wk-default-dcd1127d1a84-4blkz/collectors/public_feed.ts": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

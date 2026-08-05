@@ -1,0 +1,70 @@
+summary: ''
+description: ''
+lock: '!inline f/flows/scan_adoption_deals.script.lock'
+kind: script
+schema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  type: object
+  properties:
+    sources:
+      type: array
+      description: ''
+      default: null
+      format: resource-source
+      items:
+        type: object
+        properties:
+          externalId:
+            type: string
+            description: ''
+            originalType: string
+          hash:
+            type: string
+            description: ''
+            originalType: string
+          headline:
+            type: string
+            description: ''
+            originalType: string
+          publishedAt:
+            type: number
+            description: ''
+          publisher:
+            type: string
+            description: ''
+            originalType: string
+          publisherReputation:
+            type: string
+            description: ''
+            originalType: string
+          rawExcerpt:
+            type: string
+            description: ''
+            originalType: string
+          sourceClass:
+            type: string
+            description: ''
+            enum:
+              - primary_structured
+              - secondary_signal
+              - community
+            originalType: enum
+          sourceType:
+            type: string
+            description: ''
+            originalType: string
+          url:
+            type: string
+            description: ''
+            originalType: string
+      originalType: record[]
+    sourceTypes:
+      type: array
+      description: ''
+      default: null
+      items:
+        type: string
+      originalType: string[]
+  required:
+    - sourceTypes
+    - sources

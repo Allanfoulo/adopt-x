@@ -1,0 +1,7 @@
+version: v2
+locks:
+  f/collectors/public_feed: c1ee3148f56e7071ab8e04833d00a92aef51b8312a3c179894ad0000e4f7857b
+  f/flows/last30days_runner: 0d5d712edb9c1f7a0747fee6375e17cfef82d409c57b8dcc2304de063176fd98
+  f/flows/research_candidate: 5d7ab309e289ce7cf76c42b4ca685e1bb6ca4b5f4d08d911a71cbd63c00bdb73
+  f/flows/run_scheduled_scan: 6b55ecf415b4a3b1d0e8ee7f1c2df567030ed70944a880c6e1cc273d2186d250
+  f/flows/scan_adoption_deals: 3027b8dc897cd7d2528597358fcb335a98f183766bd7978296bb279540502675

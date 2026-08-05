@@ -6,11 +6,11 @@ This folder includes a `wmill.yaml` sync configuration. From a machine with the 
 
 ## Initial flow
 
-1. Schedule `collectors/public_feed.ts` every 1-2 hours for configured feeds.
-2. Pass the returned items to `flows/scan_adoption_deals.ts`.
+1. Schedule `f/collectors/public_feed.ts` every 1-2 hours for configured feeds.
+2. Pass the returned items to `f/flows/scan_adoption_deals.ts`.
 3. The flow calls `ingest:ingestSourceBatch`, which is idempotent by external id and content hash.
 4. A downstream Mastra run normalizes candidates and scores AI-adoption relevance.
-5. Call `flows/research_candidate.ts` only for new, ambiguous, high-confidence, or approved candidates. Configure it to call `flows/last30days_runner.ts`.
+5. Call `f/flows/research_candidate.ts` only for new, ambiguous, high-confidence, or approved candidates. Configure it to call `f/flows/last30days_runner.ts`.
 
 ## Environment
 

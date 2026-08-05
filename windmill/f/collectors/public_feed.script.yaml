@@ -1,0 +1,39 @@
+summary: ''
+description: ''
+lock: '!inline f/collectors/public_feed.script.lock'
+kind: script
+schema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  type: object
+  properties:
+    feeds:
+      type: array
+      description: ''
+      default: null
+      format: resource-feed_config
+      items:
+        type: object
+        properties:
+          publisher:
+            type: string
+            description: ''
+            originalType: string
+          sourceClass:
+            type: string
+            description: ''
+            enum:
+              - primary_structured
+              - secondary_signal
+              - community
+            originalType: enum
+          sourceType:
+            type: string
+            description: ''
+            originalType: string
+          url:
+            type: string
+            description: ''
+            originalType: string
+      originalType: record[]
+  required:
+    - feeds

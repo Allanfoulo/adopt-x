@@ -1,0 +1,30 @@
+summary: ''
+description: ''
+lock: '!inline f/flows/last30days_runner.script.lock'
+kind: script
+schema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  type: object
+  properties:
+    plan:
+      type: object
+      description: ''
+      default: null
+      format: resource-query_plan
+      properties:
+        ranking_query:
+          type: string
+          description: ''
+          originalType: string
+        subqueries:
+          type: object
+          description: ''
+          format: resource-array
+    topic:
+      type: string
+      description: ''
+      default: null
+      originalType: string
+  required:
+    - topic
+    - plan
