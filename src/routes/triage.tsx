@@ -10,11 +10,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Filter,
+  Loader2,
   Info,
   MoreHorizontal,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import {
   AppShell,
@@ -93,6 +96,26 @@ type RunRow = {
   error?: string | null;
 };
 
+type BriefRunDetails = {
+  id: string;
+  status: string;
+  when: string;
+  total: number;
+  completed: number;
+  failed: number;
+  remaining: number;
+  progress: number;
+  error: string | null;
+  items: {
+    externalId: string;
+    company: string;
+    target: string;
+    status: string;
+    error: string | null;
+    briefId: string | null;
+  }[];
+};
+
 type OperationalActivity = {
   id: string;
   label: string;
@@ -147,6 +170,13 @@ const getBriefRunsReference: FunctionReference<
   { limit?: number },
   RunRow[]
 > = makeFunctionReference("briefs:getRuns");
+
+const getBriefRunDetailsReference: FunctionReference<
+  "query",
+  "public",
+  { externalRunId: string },
+  BriefRunDetails | null
+> = makeFunctionReference("briefs:getRunDetails");
 
 type ReviewCandidatesResult = {
   updated: number;
@@ -505,6 +535,15 @@ function Triage() {
   const [isReviewing, setIsReviewing] = useState(false);
   const [isQueueingBriefs, setIsQueueingBriefs] = useState(false);
   const [showAllBriefRuns, setShowAllBriefRuns] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const runDetails = useQuery(
+    getBriefRunDetailsReference,
+    selectedRunId ? { externalRunId: selectedRunId } : "skip",
+  );
+
+  const openRunDetails = (id: string) => {
+    setSelectedRunId(id);
+  };
 
   const visibleRows = useMemo(() => {
     if (activeTab === "All") return view.rows;
@@ -656,7 +695,7 @@ function Triage() {
       success({
         title: "Brief run queued",
         description: `${result.queued} candidate${result.queued === 1 ? "" : "s"} added to ${result.runId}. Track progress in the Operational Panel.`,
-        action: { label: "View run" },
+        action: { label: "View run", onClick: () => openRunDetails(result.runId) },
       });
     } catch (err) {
       error({
@@ -669,6 +708,7 @@ function Triage() {
   };
 
   const handleRunClick = (id: string, status: string) => {
+    openRunDetails(id);
     if (status === "Partial Failed") {
       error({
         title: `${id} partially failed`,
@@ -684,7 +724,11 @@ function Triage() {
         status === "Running"
           ? "This run is still processing and will post results into the queue automatically."
           : "This run completed successfully and remains available for audit review.",
-      action: { label: "Open details", emphasis: "secondary" },
+      action: {
+        label: "Open details",
+        emphasis: "secondary",
+        onClick: () => openRunDetails(id),
+      },
     });
   };
 
@@ -1008,6 +1052,13 @@ function Triage() {
           </div>
         </section>
       </div>
+      {selectedRunId ? (
+        <BriefRunDetailsDrawer
+          run={runDetails}
+          loading={runDetails === undefined}
+          onClose={() => setSelectedRunId(null)}
+        />
+      ) : null}
     </AppShell>
   );
 }
@@ -1036,6 +1087,128 @@ function TriageHeaderActions({ onStartScan }: { onStartScan: () => void | Promis
       <PrimaryButton icon={Plus} onClick={onStartScan}>
         New Scan
       </PrimaryButton>
+    </div>
+  );
+}
+
+function BriefRunDetailsDrawer({
+  run,
+  loading,
+  onClose,
+}: {
+  run: BriefRunDetails | null | undefined;
+  loading: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/35" role="presentation" onMouseDown={onClose}>
+      <aside
+        className="h-full w-full max-w-[440px] overflow-y-auto border-l border-hairline bg-surface-0/95 p-5 shadow-[-20px_0_70px_rgba(0,0,0,0.35)] backdrop-blur-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="brief-run-details-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-hairline-soft pb-4">
+          <div className="min-w-0">
+            <div className="mono text-[9px] uppercase tracking-[0.16em] text-text-muted">
+              Brief Run Details
+            </div>
+            <h2 id="brief-run-details-title" className="mt-2 truncate text-[16px] font-semibold text-text-primary">
+              {run?.id ?? "Loading run..."}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-hairline text-text-muted hover:bg-surface-hover hover:text-text-primary"
+            aria-label="Close run details"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center gap-2 py-8 text-[11px] text-text-secondary">
+            <Loader2 className="h-4 w-4 animate-spin text-info" /> Loading run details...
+          </div>
+        ) : !run ? (
+          <div className="py-8 text-[11px] text-text-secondary">
+            This run is no longer available.
+          </div>
+        ) : (
+          <div className="space-y-5 pt-5">
+            <div className="rounded-lg border border-hairline-soft bg-surface-2/40 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-text-secondary">Status</span>
+                <StatusBadge status={run.status} size="xs" />
+              </div>
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/8">
+                <div className="h-full rounded-full bg-lime transition-[width] duration-300" style={{ width: `${run.progress}%` }} />
+              </div>
+              <div className="mt-2 flex justify-between text-[10px] text-text-muted">
+                <span>{run.completed} completed / {run.total} total</span>
+                <span className="mono">{run.progress}%</span>
+              </div>
+              <div className="mt-3 text-[10px] text-text-muted">Started {run.when}</div>
+              {run.error ? (
+                <div className="mt-3 rounded-md border border-danger/25 bg-danger/[0.08] px-3 py-2 text-[10px] text-danger">
+                  {run.error}
+                </div>
+              ) : null}
+            </div>
+
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-[11px] font-medium text-text-primary">Candidates</div>
+                <span className="mono text-[10px] text-text-muted">{run.items.length}</span>
+              </div>
+              <div className="space-y-2">
+                {run.items.map((item) => {
+                  const style = statusStyles[item.status] ?? statusStyles.Empty;
+                  const Icon = style.icon;
+                  return (
+                    <div key={item.externalId} className="rounded-lg border border-hairline-soft bg-surface-2/30 px-3 py-3">
+                      <div className="flex items-start gap-3">
+                        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: style.color }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10.5px] font-medium text-text-primary">
+                            {item.company} / {item.target}
+                          </div>
+                          <div className="mt-1 text-[10px]" style={{ color: style.color }}>
+                            {item.status}
+                          </div>
+                          {item.error ? <div className="mt-1 text-[10px] text-danger">{item.error}</div> : null}
+                        </div>
+                        <Link
+                          to="/candidate"
+                          search={{ externalId: item.externalId }}
+                          onClick={onClose}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                          aria-label={`Open ${item.company} candidate`}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {run.completed > 0 ? (
+              <Link
+                to="/briefs"
+                onClick={onClose}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-lime/30 bg-lime/[0.08] px-3 text-[10.5px] font-medium text-lime hover:bg-lime/[0.14]"
+              >
+                Open Brief Archive
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            ) : null}
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

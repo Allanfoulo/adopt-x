@@ -96,6 +96,59 @@ export const getRuns = query({
   },
 });
 
+export const getRunDetails = query({
+  args: { externalRunId: v.string() },
+  handler: async (ctx, args) => {
+    const workspaceId = await getDemoWorkspaceId(ctx);
+    if (!workspaceId) return null;
+
+    const rows = await ctx.db
+      .query("briefRuns")
+      .withIndex("by_workspaceId_and_externalRunId", (q) =>
+        q.eq("workspaceId", workspaceId).eq("externalRunId", args.externalRunId),
+      )
+      .collect();
+    if (rows.length === 0) return null;
+
+    const completed = rows.filter((row) => row.status === "completed").length;
+    const failed = rows.filter((row) => row.status === "failed").length;
+    const running = rows.some((row) => row.status === "running");
+    const status = failed > 0 && completed + failed === rows.length
+      ? "Partial Failed"
+      : completed === rows.length
+        ? "Completed"
+        : running
+          ? "Running"
+          : "Queued";
+    const items = [];
+    for (const row of rows) {
+      const candidate = await ctx.db.get(row.candidateId);
+      if (!candidate) continue;
+      items.push({
+        externalId: candidate.externalId,
+        company: candidate.company,
+        target: candidate.target,
+        status: row.status,
+        error: row.error ?? null,
+        briefId: candidate.briefId ?? null,
+      });
+    }
+
+    return {
+      id: args.externalRunId,
+      status,
+      when: formatDateLabel(rows[0].startedAt),
+      total: rows.length,
+      completed,
+      failed,
+      remaining: rows.length - completed - failed,
+      progress: Math.round(((completed + failed) / rows.length) * 100),
+      error: rows.find((row) => row.error)?.error ?? null,
+      items,
+    };
+  },
+});
+
 export const getArchive = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
