@@ -188,6 +188,117 @@ export const getArchive = query({
   },
 });
 
+export const getArchiveDetail = query({
+  args: { externalId: v.string() },
+  handler: async (ctx, args) => {
+    const workspaceId = await getDemoWorkspaceId(ctx);
+    if (!workspaceId) return null;
+
+    const brief = await ctx.db
+      .query("dealBriefs")
+      .withIndex("by_workspaceId_and_externalId", (q) =>
+        q.eq("workspaceId", workspaceId).eq("externalId", args.externalId),
+      )
+      .unique();
+    if (!brief) return null;
+
+    const candidate = await ctx.db.get(brief.candidateId);
+    if (!candidate) return null;
+
+    const links = await ctx.db
+      .query("candidateSourceLinks")
+      .withIndex("by_workspaceId_and_candidateId", (q) =>
+        q.eq("workspaceId", workspaceId).eq("candidateId", candidate._id),
+      )
+      .take(20);
+    const sources = (await Promise.all(links.map((link) => ctx.db.get(link.sourceHitId))))
+      .filter((source): source is Doc<"sourceHits"> => source !== null)
+      .sort((a, b) => b.publishedAt - a.publishedAt);
+
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspaceId))
+      .collect();
+    const usersById = new Map(users.map((user) => [user._id, user]));
+    const briefEvents = await ctx.db
+      .query("reviewAuditEvents")
+      .withIndex("by_workspaceId_and_briefId_and_createdAt", (q) =>
+        q.eq("workspaceId", workspaceId).eq("briefId", brief._id),
+      )
+      .order("desc")
+      .take(20);
+    const candidateEvents = await ctx.db
+      .query("reviewAuditEvents")
+      .withIndex("by_workspaceId_and_candidateId_and_createdAt", (q) =>
+        q.eq("workspaceId", workspaceId).eq("candidateId", candidate._id),
+      )
+      .order("desc")
+      .take(20);
+    const auditEvents = [...briefEvents, ...candidateEvents]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .filter((event, index, all) => all.findIndex((item) => item._id === event._id) === index)
+      .slice(0, 20);
+
+    return {
+      id: brief.externalId,
+      brief: {
+        executiveSummary: brief.executiveSummary,
+        transactionOverview: brief.transactionOverview,
+        strategicRationale: brief.strategicRationale,
+        risks: brief.risks,
+        marketImplications: brief.marketImplications,
+        keyTakeaways: brief.keyTakeaways,
+        confidenceScore: brief.confidenceScore ?? null,
+        version: `v${brief.version}`,
+        status: titleCase(brief.status),
+        updatedAt: brief.updatedAt,
+      },
+      candidate: {
+        company: candidate.company,
+        target: candidate.target || "Unknown",
+        sector: titleCase(candidate.sector),
+        geography: candidate.geography,
+        dealType: titleCase(candidate.dealType),
+        aiRole: titleCase(candidate.aiRole),
+        announcementDate: formatDateLabel(candidate.announcementDate),
+      },
+      transaction: [
+        { label: "Deal Type", value: titleCase(candidate.dealType) },
+        { label: "Structure", value: brief.dealStructure ?? "Not available" },
+        { label: "Announced", value: formatDateLabel(candidate.announcementDate) },
+        { label: "Target HQ", value: candidate.geography || "Not available" },
+        { label: "Enterprise Value", value: "Not available" },
+        { label: "Employees", value: "Not available" },
+      ],
+      sources: sources.map((source) => ({
+        headline: source.headline,
+        publisher: source.publisher,
+        date: formatDateLabel(source.publishedAt),
+        type: titleCase(source.sourceType),
+        url: source.url,
+      })),
+      auditTrail: auditEvents.map((event) => {
+        const actor = event.actorUserId ? usersById.get(event.actorUserId) : null;
+        return {
+          actor: actor?.displayName ?? titleCase(event.actorType),
+          initials: actor?.avatarInitials ?? "AI",
+          action: titleCase(event.action),
+          detail: event.after ?? event.before ?? event.reason ?? event.correlationId,
+          when: formatDateLabel(event.createdAt),
+          system: event.actorType === "system",
+        };
+      }),
+      metadata: [
+        { label: "Owner", value: brief.ownerUserId ? usersById.get(brief.ownerUserId)?.displayName ?? "Not available" : "System" },
+        { label: "Team", value: "Not available" },
+        { label: "Tags", value: `${titleCase(candidate.sector)}, ${titleCase(candidate.aiRole)}` },
+        { label: "Visibility", value: "Internal" },
+        { label: "Last Updated", value: formatDateLabel(brief.updatedAt) },
+      ],
+    };
+  },
+});
+
 export const generateCandidate = internalAction({
   args: { briefRunId: v.id("briefRuns") },
   handler: async (ctx, args) => {

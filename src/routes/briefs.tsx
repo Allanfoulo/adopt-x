@@ -69,11 +69,54 @@ type BriefRunRow = {
   error: string | null;
 };
 
+type ArchiveDetail = {
+  id: string;
+  brief: {
+    executiveSummary: string;
+    transactionOverview: string;
+    strategicRationale: string;
+    risks: string[];
+    marketImplications: string;
+    keyTakeaways: string[];
+    confidenceScore: number | null;
+    version: string;
+    status: string;
+    updatedAt: number;
+  };
+  candidate: {
+    company: string;
+    target: string;
+    sector: string;
+    geography: string;
+    dealType: string;
+    aiRole: string;
+    announcementDate: string;
+  };
+  transaction: { label: string; value: string }[];
+  sources: { headline: string; publisher: string; date: string; type: string; url: string }[];
+  auditTrail: {
+    actor: string;
+    initials: string;
+    action: string;
+    detail: string;
+    when: string;
+    system: boolean;
+  }[];
+  metadata: { label: string; value: string }[];
+};
+
 const getArchiveReference: FunctionReference<"query", "public", { limit?: number }, ArchiveRow[]> =
   makeFunctionReference("briefs:getArchive");
 
 const getBriefRunsReference: FunctionReference<"query", "public", { limit?: number }, BriefRunRow[]> =
   makeFunctionReference("briefs:getRuns");
+
+const getArchiveDetailReference: FunctionReference<
+  "query",
+  "public",
+  { externalId: string },
+  ArchiveDetail | null
+> = makeFunctionReference("briefs:getArchiveDetail");
 
 const emptyArchiveRows: ArchiveRow[] = [];
 
@@ -283,6 +326,10 @@ function BriefArchive() {
 
   const selectedBrief =
     archiveRows.find((row) => row.id === selectedBriefId) ?? archiveRows[0];
+  const selectedDetail = useQuery(
+    getArchiveDetailReference,
+    selectedBrief ? { externalId: selectedBrief.id } : "skip",
+  );
   const visibleArchiveRows =
     activeTab === "All Briefs" ? archiveRows : archiveRows.filter((row) => row.status === activeTab);
 
@@ -363,6 +410,7 @@ function BriefArchive() {
               activeSection={activeSection}
               onSectionChange={setActiveSection}
               selectedBrief={selectedBrief}
+              detail={selectedDetail}
               onDownload={handleDownload}
               onShare={handleShare}
               onViewSources={handleSourceView}
@@ -372,8 +420,8 @@ function BriefArchive() {
 
         <div className="space-y-4">
           <RecentBriefRunsPanel rows={briefRuns ?? []} loading={briefRuns === undefined} />
-          <BriefArchiveAuditTrailPanel />
-          <BriefMetadataPanel />
+          <BriefArchiveAuditTrailPanel detail={selectedDetail} />
+          <BriefMetadataPanel detail={selectedDetail} />
         </div>
       </div>
     </AppShell>
@@ -640,6 +688,7 @@ function SelectedBriefWorkspace({
   activeSection,
   onSectionChange,
   selectedBrief,
+  detail,
   onDownload,
   onShare,
   onViewSources,
@@ -647,6 +696,7 @@ function SelectedBriefWorkspace({
   activeSection: string;
   onSectionChange: (section: string) => void;
   selectedBrief: ArchiveRow;
+  detail: ArchiveDetail | null | undefined;
   onDownload: () => void;
   onShare: () => void;
   onViewSources: () => void;
@@ -673,7 +723,10 @@ function SelectedBriefWorkspace({
                 <span>{selectedBrief.geography}</span>
                 <span className="text-text-muted">-</span>
                 <span>
-                  Approved {selectedBrief.approvedDate}, {selectedBrief.approvedTime} by Maya Patel
+                  {detail?.brief.status ?? "Loading"} {selectedBrief.approvedDate}, {selectedBrief.approvedTime}
+                  {detail?.metadata.find((item) => item.label === "Owner")?.value
+                    ? ` by ${detail.metadata.find((item) => item.label === "Owner")?.value}`
+                    : ""}
                 </span>
               </div>
             </div>
@@ -697,9 +750,10 @@ function SelectedBriefWorkspace({
         <BriefWorkspaceSectionNav
           activeSection={activeSection}
           onSectionChange={onSectionChange}
+          detail={detail}
         />
-        <BriefWorkspaceSummaryPane />
-        <BriefWorkspaceDetailPane onViewSources={onViewSources} />
+        <BriefWorkspaceSummaryPane detail={detail} />
+        <BriefWorkspaceDetailPane detail={detail} onViewSources={onViewSources} />
       </div>
     </Panel>
   );
@@ -708,14 +762,26 @@ function SelectedBriefWorkspace({
 function BriefWorkspaceSectionNav({
   activeSection,
   onSectionChange,
+  detail,
 }: {
   activeSection: string;
   onSectionChange: (section: string) => void;
+  detail: ArchiveDetail | null | undefined;
 }) {
+  const sections = [
+    { label: "Executive Summary" },
+    { label: "Transaction Overview" },
+    { label: "Strategic Rationale" },
+    { label: "Risks & Mitigations" },
+    { label: "Market Implications" },
+    { label: "Key Takeaways" },
+    { label: "Sources & Inputs", count: detail?.sources.length ?? 0 },
+    { label: "Revision History", count: detail?.auditTrail.length ?? 0 },
+  ];
   return (
     <div className="border-b border-hairline-soft p-3 xl:border-b-0 xl:border-r xl:p-2.5">
       <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-1">
-        {sectionNav.map((section) => {
+        {sections.map((section) => {
           const active = activeSection === section.label;
 
           return (
@@ -739,24 +805,24 @@ function BriefWorkspaceSectionNav({
   );
 }
 
-function BriefWorkspaceSummaryPane() {
+function BriefWorkspaceSummaryPane({ detail }: { detail: ArchiveDetail | null | undefined }) {
+  const confidenceScore = detail?.brief.confidenceScore;
+  const summary = detail?.brief.executiveSummary ?? "Loading brief details...";
+  const takeaways = detail?.brief.keyTakeaways ?? [];
+
   return (
     <div className="border-b border-hairline-soft p-4 sm:p-5 xl:border-b-0 xl:border-r">
       <div className="space-y-5">
         <div>
           <p className="max-w-[66ch] text-[12px] leading-6 text-text-secondary">
-            Purple Group's proposed acquisition of Telescope AI strengthens its AI-native investment
-            intelligence capabilities across the APAC region. Telescope AI's proprietary analytics
-            platform, deep domain datasets, and strong enterprise traction position Purple Group to
-            accelerate product innovation, expand addressable market, and deliver higher-value
-            insights to institutional clients.
+            {summary}
           </p>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          {summarySignals.map((item) => (
+          {takeaways.map((takeaway) => (
             <div
-              key={item.title}
+              key={takeaway}
               className="rounded-lg border border-hairline-soft bg-surface-2/40 px-3 py-3"
             >
               <div className="flex items-center gap-2">
@@ -767,29 +833,37 @@ function BriefWorkspaceSummaryPane() {
                     borderColor: "rgba(183,241,55,0.25)",
                   }}
                 >
-                  <item.icon className="h-3.5 w-3.5 text-lime" />
+                  <Sparkles className="h-3.5 w-3.5 text-lime" />
                 </div>
-                <div className="text-[11px] font-medium text-text-primary">{item.title}</div>
+                <div className="text-[11px] font-medium text-text-primary">Key takeaway</div>
               </div>
-              <p className="mt-2 text-[10px] leading-5 text-text-secondary">{item.copy}</p>
+              <p className="mt-2 text-[10px] leading-5 text-text-secondary">{takeaway}</p>
             </div>
           ))}
         </div>
 
+        {takeaways.length === 0 ? (
+          <div className="rounded-lg border border-hairline-soft bg-surface-2/35 px-3 py-3 text-[10.5px] text-text-secondary">
+            No key takeaways were generated for this brief.
+          </div>
+        ) : null}
+
         <div className="rounded-lg border border-hairline-soft bg-surface-2/35 px-3 py-3.5">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-full border border-lime/45 bg-lime/[0.10]">
-              <span className="mono text-[16px] text-lime">92</span>
+              <span className="mono text-[16px] text-lime">{confidenceScore ?? "-"}</span>
             </div>
             <div>
               <div className="text-[12px] font-medium text-text-primary">Confidence Score</div>
               <div className="mt-1 text-[10.5px] text-text-secondary">
-                High confidence in analysis
+                {confidenceScore === null || confidenceScore === undefined
+                  ? "Not available"
+                  : "Generated from candidate confidence and source coverage"}
               </div>
             </div>
           </div>
           <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-white/6">
-            <div className="h-full w-[92%] rounded-full bg-lime" />
+            <div className="h-full rounded-full bg-lime" style={{ width: `${confidenceScore ?? 0}%` }} />
           </div>
         </div>
       </div>
@@ -798,16 +872,21 @@ function BriefWorkspaceSummaryPane() {
 }
 
 function BriefWorkspaceDetailPane({
+  detail,
   onViewSources,
 }: {
+  detail: ArchiveDetail | null | undefined;
   onViewSources: () => void;
 }) {
+  const transaction = detail?.transaction ?? [];
+  const sources = detail?.sources ?? [];
+
   return (
     <div className="space-y-4 p-4 sm:p-5">
       <div className="rounded-lg border border-hairline-soft bg-surface-2/35 px-4 py-4">
         <div className="text-[12px] font-medium text-text-primary">Transaction Overview</div>
         <div className="mt-4 space-y-2.5">
-          {transactionOverview.map((item) => (
+          {transaction.map((item) => (
             <div key={item.label} className="grid grid-cols-[116px_minmax(0,1fr)] gap-3 text-[10.5px]">
               <div className="text-text-secondary">{item.label}</div>
               <div className="text-text-primary">{item.value}</div>
@@ -819,11 +898,11 @@ function BriefWorkspaceDetailPane({
       <div className="rounded-lg border border-hairline-soft bg-surface-2/35 px-4 py-4">
         <div className="text-[12px] font-medium text-text-primary">Source Snapshot (Top 3)</div>
         <div className="mt-4 space-y-3">
-          {sourceSnapshot.map((item) => (
-            <div key={item.label} className="flex items-center justify-between gap-3 text-[10.5px]">
+          {sources.slice(0, 3).map((item) => (
+            <div key={item.url} className="flex items-center justify-between gap-3 text-[10.5px]">
               <span className="flex min-w-0 items-center gap-2 text-text-primary">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{item.publisher}: {item.headline}</span>
               </span>
               <span className="mono shrink-0 text-text-secondary">{item.date}</span>
             </div>
@@ -834,7 +913,7 @@ function BriefWorkspaceDetailPane({
           onClick={onViewSources}
           className="mt-4 inline-flex h-9 items-center rounded-md border border-hairline bg-surface-1 px-3 text-[10.5px] text-text-primary transition-colors hover:bg-surface-hover"
         >
-          View all 14 sources
+          View all {sources.length} sources
         </button>
       </div>
     </div>
@@ -877,7 +956,8 @@ function RecentBriefRunsPanel({ rows, loading }: { rows: readonly BriefRunRow[];
   );
 }
 
-function BriefArchiveAuditTrailPanel() {
+function BriefArchiveAuditTrailPanel({ detail }: { detail: ArchiveDetail | null | undefined }) {
+  const entries = detail?.auditTrail ?? [];
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-4 sm:px-5">
@@ -889,7 +969,10 @@ function BriefArchiveAuditTrailPanel() {
         </button>
       </div>
       <div className="space-y-4 px-4 py-4 sm:px-5">
-        {auditTrail.map((entry) => (
+        {entries.length === 0 ? (
+          <div className="text-[10.5px] text-text-secondary">No audit events recorded for this brief.</div>
+        ) : null}
+        {entries.map((entry) => (
           <div key={`${entry.actor}-${entry.when}`} className="flex items-start gap-3">
             <div
               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${
@@ -924,7 +1007,8 @@ function BriefArchiveAuditTrailPanel() {
   );
 }
 
-function BriefMetadataPanel() {
+function BriefMetadataPanel({ detail }: { detail: ArchiveDetail | null | undefined }) {
+  const metadata = detail?.metadata ?? [];
   return (
     <Panel>
       <div className="border-b border-hairline-soft px-4 py-4 sm:px-5">
@@ -933,7 +1017,7 @@ function BriefMetadataPanel() {
         </div>
       </div>
       <div className="space-y-3 px-4 py-4 sm:px-5">
-        {briefMetadata.map((item) => (
+        {metadata.map((item) => (
           <div key={item.label} className="grid grid-cols-[74px_minmax(0,1fr)] gap-3 text-[10.5px]">
             <div className="text-text-secondary">{item.label}</div>
             <div className="text-text-primary">{item.value}</div>
