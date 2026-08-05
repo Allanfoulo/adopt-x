@@ -19,12 +19,18 @@ export const getDetail = query({
       return null;
     }
 
-    const candidate = await ctx.db
-      .query("dealCandidates")
-      .withIndex("by_workspaceId_and_externalId", (q) =>
-        q.eq("workspaceId", workspaceId).eq("externalId", args.externalId ?? "dc_002"),
-      )
-      .unique();
+    const candidate = args.externalId
+      ? await ctx.db
+          .query("dealCandidates")
+          .withIndex("by_workspaceId_and_externalId", (q) =>
+            q.eq("workspaceId", workspaceId).eq("externalId", args.externalId!),
+          )
+          .unique()
+      : await ctx.db
+          .query("dealCandidates")
+          .withIndex("by_workspaceId_and_updatedAt", (q) => q.eq("workspaceId", workspaceId))
+          .order("desc")
+          .first();
     if (!candidate) {
       return null;
     }
@@ -227,13 +233,22 @@ export const reviewCandidates = mutation({
 });
 
 function candidateRow(candidate: Doc<"dealCandidates">) {
+  const target = candidate.target && candidate.target !== "Unknown" ? candidate.target : null;
+  const verb =
+    candidate.dealType === "acquisition"
+      ? "acquires"
+      : candidate.dealType === "strategic_investment"
+        ? "invests in"
+        : candidate.dealType === "product_launch"
+          ? "launches"
+          : "partners with";
   return {
     id: candidate.externalId,
     company: candidate.company,
     target: candidate.target || "N/A",
-    headline: `${candidate.company} ${
-      candidate.dealType === "acquisition" ? "acquires" : "partners with"
-    } ${candidate.target || titleCase(candidate.aiRole)} to expand ${titleCase(candidate.aiRole)}`,
+    headline: target
+      ? `${candidate.company} ${verb} ${target} for ${titleCase(candidate.aiRole)}`
+      : `${candidate.company} shows a ${titleCase(candidate.aiRole)} adoption signal`,
     status: candidateStatusLabels[candidate.status],
   };
 }

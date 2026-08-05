@@ -840,6 +840,7 @@ function Triage() {
                         <td className="py-3 pr-4 sm:pr-5">
                           <Link
                             to="/candidate"
+                            search={{ externalId: row.id }}
                             onClick={(event) => event.stopPropagation()}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-text-muted transition-colors hover:border-hairline hover:bg-surface-2 hover:text-text-primary"
                             aria-label={`Open ${row.company}`}

@@ -1,8 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { FunctionReference } from "convex/server";
 import { useState } from "react";
+import { z } from "zod";
 import { AppShell, Panel, StatusBadge, ToolbarButton } from "@/components/app-shell";
 import { useToast } from "@/components/app-toast";
 import {
@@ -27,6 +28,7 @@ import {
 
 export const Route = createFileRoute("/candidate")({
   head: () => ({ meta: [{ title: "Candidate Detail - Adopt X" }] }),
+  validateSearch: z.object({ externalId: z.string().optional() }),
   component: CandidateDetail,
 });
 
@@ -270,54 +272,32 @@ const tagGroups = [
   "Press Release",
 ];
 
-function buildCandidateView(detail: CandidateDetailData | null | undefined): CandidateDetailData {
-  if (!detail) {
-    return {
-      candidate: {
-        id: "dc_002",
-        company: "MediAxis",
-        target: "ClinPilot AI",
-        headline: "MediAxis partners with ClinPilot AI to streamline triage workflows",
-        status: "Needs Review",
-      },
-      heroFields: [...heroFields],
-      sources: [...sources],
-      facts: [...facts],
-      scoreRows: [...scoreRows],
-      validationRows: [...validationRows],
-      scoreExplanations: [...scoreExplanations],
-      auditTrail: auditTrail.map((entry) => ({
-        ...entry,
-        tone: entry.tone as "human" | "system",
-      })),
-      reviewState: {
-        status: "Needs Review",
-        assignedTo: "Maya Patel",
-        assignedOn: "Jul 15, 2025, 09:10 AM",
-        sla: "Due in 2d 16h",
-      },
-      summary: {
-        text:
-          "This partnership aligns strongly with our thesis on AI-driven clinical workflow automation. ClinPilot AI provides AI-powered triage and decision support capabilities that integrate with MediAxis's clinical systems, aiming to reduce clinician workload and improve patient throughput in UK healthcare settings.",
-        reasons: [
-          "Direct application of AI to clinical workflow and triage processes",
-          "Partnership expands reach within the UK healthcare market",
-          "Addresses measurable outcomes: efficiency, accuracy, and clinician productivity",
-        ],
-      },
-      tags: [...tagGroups],
-    };
-  }
-
-  return detail;
-}
-
 function CandidateDetail() {
   const { success, error, warning } = useToast();
-  const detail = useQuery(getCandidateDetail, { externalId: "dc_002" });
+  const { externalId } = useSearch({ from: "/candidate" });
+  const detail = useQuery(getCandidateDetail, { externalId });
   const reviewCandidate = useMutation(reviewCandidates);
   const [isReviewing, setIsReviewing] = useState(false);
-  const view = buildCandidateView(detail);
+
+  if (detail === undefined) {
+    return (
+      <AppShell title="Candidate Detail">
+        <Panel className="p-6 text-sm text-text-secondary">Loading live candidate data...</Panel>
+      </AppShell>
+    );
+  }
+
+  if (detail === null) {
+    return (
+      <AppShell title="Candidate Detail">
+        <Panel className="p-6 text-sm text-text-secondary">
+          No live candidates are available yet. Run a scan to populate the review queue.
+        </Panel>
+      </AppShell>
+    );
+  }
+
+  const view = detail;
 
   const runReviewAction = async (action: "approve" | "reject") => {
     if (isReviewing) {
