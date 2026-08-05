@@ -1,7 +1,7 @@
 import { action } from "./_generated/server";
 
 const defaultWorkspace = "adoptx";
-const defaultPath = "f/flows/run_scheduled_scan";
+const defaultPath = "p/f/flows/run_scheduled_scan";
 
 /** Starts the Windmill collector without exposing its scoped token to the browser. */
 export const start = action({
