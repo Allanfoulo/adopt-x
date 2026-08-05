@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { mutation, type MutationCtx } from "./_generated/server";
 import { WORKSPACE_SLUG } from "./model";
 import { sourceClass } from "./schema";
 
@@ -16,6 +17,19 @@ const sourceInput = v.object({
   hash: v.string(),
 });
 
+type SourceInput = {
+  externalId: string;
+  sourceClass: Doc<"sourceHits">["sourceClass"];
+  sourceType: string;
+  publisher: string;
+  publisherReputation?: string;
+  url: string;
+  headline: string;
+  publishedAt: number;
+  rawExcerpt: string;
+  hash: string;
+};
+
 /**
  * Entry point for Windmill collectors. Ingestion is idempotent by external id
  * and content hash so retries do not create duplicate source evidence.
@@ -31,14 +45,7 @@ export const ingestSourceBatch = mutation({
       throw new Error("A scan batch may contain at most 250 source items");
     }
 
-    const workspace = await ctx.db
-      .query("workspaces")
-      .withIndex("by_slug", (q) => q.eq("slug", WORKSPACE_SLUG))
-      .unique();
-    if (!workspace) {
-      throw new Error(`Workspace '${WORKSPACE_SLUG}' has not been seeded`);
-    }
-
+    const workspace = await getWorkspace(ctx);
     const now = Date.now();
     const runId = await ctx.db.insert("scanRuns", {
       workspaceId: workspace._id,
@@ -54,6 +61,7 @@ export const ingestSourceBatch = mutation({
 
     let inserted = 0;
     let duplicates = 0;
+    let candidatesCreated = 0;
 
     for (const source of args.sources) {
       const existingByExternalId = await ctx.db
@@ -74,7 +82,7 @@ export const ingestSourceBatch = mutation({
         continue;
       }
 
-      await ctx.db.insert("sourceHits", {
+      const sourceHitId = await ctx.db.insert("sourceHits", {
         workspaceId: workspace._id,
         scanRunId: runId,
         externalId: source.externalId,
@@ -90,14 +98,261 @@ export const ingestSourceBatch = mutation({
         createdAt: now,
       });
       inserted += 1;
+      candidatesCreated += await materializeSource(ctx, workspace._id, sourceHitId, source, now);
     }
 
     await ctx.db.patch(runId, {
       status: "completed",
       hitCount: inserted,
+      candidateCount: candidatesCreated,
       completedAt: Date.now(),
     });
 
-    return { runId, inserted, duplicates };
+    return { runId, inserted, duplicates, candidatesCreated };
   },
 });
+
+/** Materializes source hits that were ingested before candidate extraction existed. */
+export const materializePendingSources = mutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const workspace = await getWorkspace(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 250, 1), 250);
+    const sourceHits = await ctx.db
+      .query("sourceHits")
+      .withIndex("by_workspaceId_and_publishedAt", (q) => q.eq("workspaceId", workspace._id))
+      .order("desc")
+      .take(limit);
+
+    let created = 0;
+    let linked = 0;
+    for (const source of sourceHits) {
+      const result = await materializeSource(
+        ctx,
+        workspace._id,
+        source._id,
+        source,
+        Date.now(),
+      );
+      created += result;
+      linked += result > 0 ? 1 : 0;
+    }
+
+    return { examined: sourceHits.length, created, linked };
+  },
+});
+
+async function getWorkspace(ctx: MutationCtx) {
+  const workspace = await ctx.db
+    .query("workspaces")
+    .withIndex("by_slug", (q) => q.eq("slug", WORKSPACE_SLUG))
+    .unique();
+  if (!workspace) {
+    throw new Error(`Workspace '${WORKSPACE_SLUG}' has not been seeded`);
+  }
+  return workspace;
+}
+
+async function materializeSource(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  sourceHitId: Id<"sourceHits">,
+  source: SourceInput | Doc<"sourceHits">,
+  now: number,
+) {
+  if (!isAdoptionSignal(source.headline, source.rawExcerpt)) {
+    return 0;
+  }
+
+  const existingLink = await ctx.db
+    .query("candidateSourceLinks")
+    .withIndex("by_workspaceId_and_sourceHitId", (q) =>
+      q.eq("workspaceId", workspaceId).eq("sourceHitId", sourceHitId),
+    )
+    .take(1);
+  if (existingLink[0]) {
+    return 0;
+  }
+
+  const draft = extractCandidate(source);
+  const existingCandidate = await ctx.db
+    .query("dealCandidates")
+    .withIndex("by_workspaceId_and_dedupeKey", (q) =>
+      q.eq("workspaceId", workspaceId).eq("dedupeKey", draft.dedupeKey),
+    )
+    .take(1);
+
+  let candidateId = existingCandidate[0]?._id;
+  if (!candidateId) {
+    candidateId = await ctx.db.insert("dealCandidates", {
+      workspaceId,
+      externalId: draft.externalId,
+      dedupeKey: draft.dedupeKey,
+      status: "pending_review",
+      company: draft.company,
+      target: draft.target,
+      dealType: draft.dealType,
+      sector: draft.sector,
+      geography: draft.geography,
+      announcementDate: source.publishedAt,
+      aiRole: draft.aiRole,
+      confidenceScore: draft.confidenceScore,
+      thesisFitScore: draft.thesisFitScore,
+      sourceConfidence: draft.sourceConfidence,
+      reasoningSummary: draft.reasoningSummary,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    for (const [field, value] of [
+      ["Company", draft.company],
+      ["Target", draft.target],
+      ["Deal Type", draft.dealType],
+      ["Sector", draft.sector],
+      ["Geography", draft.geography],
+      ["AI Role", draft.aiRole],
+    ]) {
+      await ctx.db.insert("candidateFacts", {
+        workspaceId,
+        candidateId,
+        field,
+        value,
+        source: "ai",
+        sourceHitId,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.insert("domainEvents", {
+      workspaceId,
+      type: "candidate.materialized",
+      version: 1,
+      aggregateType: "dealCandidate",
+      aggregateId: candidateId,
+      correlationId: `materialize-${source.hash}`,
+      actorType: "agent",
+      actorId: "source-normalizer",
+      data: JSON.stringify({ sourceHitId, sourceType: source.sourceType }),
+      source: "ingest",
+      createdAt: now,
+    });
+  }
+
+  await ctx.db.insert("candidateSourceLinks", {
+    workspaceId,
+    candidateId,
+    sourceHitId,
+    sourceRole: source.sourceClass === "primary_structured" ? "primary" : "supporting",
+    claimSummary: "Source used for candidate extraction and adoption scoring.",
+    createdAt: now,
+  });
+
+  return existingCandidate[0] ? 0 : 1;
+}
+
+function isAdoptionSignal(headline: string, excerpt: string) {
+  const text = `${headline} ${excerpt}`;
+  return (
+    /\b(acquire|acquires|acquired|acquisition|merger|merges|partner|partners|partnership|partnered|collaborat\w*|joint venture|invests in|invested in|investment in|funding|deploys?|implements?|integrates?|launches?)\b/i.test(text) &&
+    /\b(ai|artificial intelligence|machine learning|generative|copilot|automation|model|robotics)\w*/i.test(text)
+  );
+}
+
+function extractCandidate(source: SourceInput | Doc<"sourceHits">) {
+  const text = `${source.headline} ${source.rawExcerpt}`;
+  const names = parseNames(source.headline);
+  const dealType = /acqui|buy|merger/i.test(text)
+    ? "acquisition"
+    : /invest|funding|financ/i.test(text)
+      ? "strategic_investment"
+      : /partner|alliance|collaborat|team up/i.test(text)
+        ? "strategic_partnership"
+        : "product_launch";
+  const sector = inferSector(text);
+  const sourceConfidence = source.sourceClass === "primary_structured" ? 72 : 48;
+  const thesisFitScore = Math.min(
+    95,
+    48 + (dealType === "product_launch" ? 8 : 20) + (sector === "other" ? 0 : 10),
+  );
+
+  return {
+    externalId: `candidate:${source.hash}`,
+    dedupeKey: normalizeKey(`${names.company}-${names.target}`),
+    company: names.company,
+    target: names.target,
+    dealType,
+    sector,
+    geography: inferGeography(text),
+    aiRole: inferAiRole(text),
+    confidenceScore: sourceConfidence - (names.target === "Unknown" ? 15 : 0),
+    thesisFitScore,
+    sourceConfidence,
+    reasoningSummary:
+      names.target === "Unknown"
+        ? "AI adoption signal detected; target and transaction details require analyst review."
+        : `AI adoption signal extracted from ${source.publisher}; transaction details require analyst review.`,
+  };
+}
+
+function parseNames(headline: string) {
+  const clean = headline.replace(/\s*[|:-].*$/, "").trim();
+  const match = clean.match(
+    /^(.+?)\s+(?:acquires|acquired|buys|bought|partners with|partnered with|invests in|invested in|teams up with)\s+(.+)$/i,
+  );
+  if (!match) {
+    return { company: clean.split(/\s+/).slice(0, 5).join(" ") || "Unknown", target: "Unknown" };
+  }
+  return {
+    company: cleanName(match[1]),
+    target: cleanName(match[2]),
+  };
+}
+
+function inferSector(text: string) {
+  const sectors = [
+    ["healthcare", /health|clinical|hospital|medical|pharma|patient/i],
+    ["fintech", /fintech|bank|payment|investment|capital|trading|financial/i],
+    ["insurance", /insurance|insurtech|claims|underwriting/i],
+    ["legal", /legal|law firm|compliance|regulatory/i],
+    ["retail", /retail|commerce|shopping|consumer/i],
+    ["energy", /energy|utility|solar|oil|gas/i],
+    ["logistics", /logistics|supply chain|shipping|freight/i],
+    ["marketing", /marketing|advertising|brand|media/i],
+    ["industrial", /manufactur|factory|industrial|robotics/i],
+    ["education", /education|school|university|student/i],
+  ] as const;
+  return sectors.find(([, pattern]) => pattern.test(text))?.[0] ?? "other";
+}
+
+function inferGeography(text: string) {
+  const places = [
+    ["United States", /\b(US|USA|United States|America)\b/i],
+    ["United Kingdom", /\b(UK|United Kingdom|Britain)\b/i],
+    ["Australia", /\b(Australia|Sydney|Melbourne)\b/i],
+    ["South Africa", /\b(South Africa|Johannesburg|Cape Town)\b/i],
+    ["Europe", /\b(Europe|European|EU)\b/i],
+  ] as const;
+  return places.find(([, pattern]) => pattern.test(text))?.[0] ?? "Global / Unknown";
+}
+
+function inferAiRole(text: string) {
+  if (/claims|underwriting|fraud/i.test(text)) return "claims automation";
+  if (/clinical|patient|hospital|medical/i.test(text)) return "clinical workflow support";
+  if (/investment|trading|capital|financial/i.test(text)) return "investment intelligence";
+  if (/legal|compliance|regulatory/i.test(text)) return "compliance automation";
+  if (/marketing|advertising|brand/i.test(text)) return "marketing automation";
+  if (/robotics|manufactur|factory/i.test(text)) return "industrial automation";
+  return "AI integration and workflow automation";
+}
+
+function cleanName(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/\s*\([^)]*\)/g, "")
+    .trim()
+    .slice(0, 160);
+}
+
+function normalizeKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 180);
+}
