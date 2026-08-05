@@ -15,6 +15,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CandidateRouteImport } from './routes/candidate'
 import { Route as BriefsRouteImport } from './routes/briefs'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiBriefsEnrichRouteImport } from './routes/api/briefs/enrich'
 
 const TriageRoute = TriageRouteImport.update({
   id: '/triage',
@@ -46,6 +47,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBriefsEnrichRoute = ApiBriefsEnrichRouteImport.update({
+  id: '/api/briefs/enrich',
+  path: '/api/briefs/enrich',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/settings': typeof SettingsRoute
   '/triage': typeof TriageRoute
+  '/api/briefs/enrich': typeof ApiBriefsEnrichRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/settings': typeof SettingsRoute
   '/triage': typeof TriageRoute
+  '/api/briefs/enrich': typeof ApiBriefsEnrichRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,13 +79,27 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/settings': typeof SettingsRoute
   '/triage': typeof TriageRoute
+  '/api/briefs/enrich': typeof ApiBriefsEnrichRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/briefs' | '/candidate' | '/dashboard' | '/settings' | '/triage'
+    | '/'
+    | '/briefs'
+    | '/candidate'
+    | '/dashboard'
+    | '/settings'
+    | '/triage'
+    | '/api/briefs/enrich'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/briefs' | '/candidate' | '/dashboard' | '/settings' | '/triage'
+  to:
+    | '/'
+    | '/briefs'
+    | '/candidate'
+    | '/dashboard'
+    | '/settings'
+    | '/triage'
+    | '/api/briefs/enrich'
   id:
     | '__root__'
     | '/'
@@ -86,6 +108,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/settings'
     | '/triage'
+    | '/api/briefs/enrich'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -95,6 +118,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   SettingsRoute: typeof SettingsRoute
   TriageRoute: typeof TriageRoute
+  ApiBriefsEnrichRoute: typeof ApiBriefsEnrichRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -141,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/briefs/enrich': {
+      id: '/api/briefs/enrich'
+      path: '/api/briefs/enrich'
+      fullPath: '/api/briefs/enrich'
+      preLoaderRoute: typeof ApiBriefsEnrichRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -151,6 +182,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   SettingsRoute: SettingsRoute,
   TriageRoute: TriageRoute,
+  ApiBriefsEnrichRoute: ApiBriefsEnrichRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

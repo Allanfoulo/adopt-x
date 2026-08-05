@@ -471,88 +471,36 @@ type BriefEnrichmentInput = {
 };
 
 async function generateBriefEnrichment(input: BriefEnrichmentInput) {
-  const baseUrl = (process.env.MASTRA_URL ?? process.env.MASTRA_SERVER_URL)?.replace(/\/$/, "");
-  const agentId = process.env.MASTRA_BRIEF_AGENT_ID ?? "adopt-x-brief-enrichment-agent";
-  const token = process.env.MASTRA_API_TOKEN;
+  const baseUrl = process.env.APP_GATEWAY_URL?.replace(/\/$/, "");
   if (!baseUrl) {
-    throw new Error("Brief enrichment is not configured. Set MASTRA_URL in Convex.");
+    throw new Error("Brief enrichment is not configured. Set APP_GATEWAY_URL in Convex.");
   }
 
-  const response = await fetch(`${baseUrl}/api/agents/${encodeURIComponent(agentId)}/generate`, {
+  const response = await fetch(`${baseUrl}/api/briefs/enrich`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      messages: [{ role: "user", content: buildEnrichmentPrompt(input) }],
-      maxSteps: 8,
-      toolChoice: "auto",
-      tracingOptions: { traceName: "adopt-x-brief-enrichment" },
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
   const responseText = await response.text();
   if (!response.ok) {
     throw new Error(`Mastra brief enrichment failed (${response.status}): ${responseText.slice(0, 500)}`);
   }
 
-  let body: { text?: string; object?: unknown; toolResults?: unknown[]; steps?: unknown[] };
+  let body: { value?: unknown; toolResults?: unknown[] };
   try {
     body = JSON.parse(responseText) as typeof body;
   } catch {
     throw new Error("Mastra brief enrichment returned invalid JSON.");
   }
-  const parsed = parseEnrichmentJson(body.object ?? body.text);
-  if (!parsed) throw new Error("Mastra brief enrichment returned no JSON object.");
-  const toolPayload = JSON.stringify({ toolResults: body.toolResults, steps: body.steps });
-  const validated = validateBriefEnrichment(parsed);
+  if (!body.value || typeof body.value !== "object" || Array.isArray(body.value)) {
+    throw new Error("Brief gateway returned no enrichment object.");
+  }
+  const toolPayload = JSON.stringify(body.toolResults ?? []);
+  const validated = validateBriefEnrichment(body.value as Record<string, unknown>);
   return {
     ...validated,
     last30daysUsed: validated.last30daysUsed && /last30days/i.test(toolPayload),
   };
-}
-
-function buildEnrichmentPrompt(input: BriefEnrichmentInput): string {
-  return [
-    "Generate an analyst-ready Adopt X brief from this candidate and its public evidence.",
-    "Use the last30days-research tool for secondary context when available, but never treat it as proof of the deal.",
-    "Return only valid JSON with exactly the requested keys. Do not use markdown.",
-    JSON.stringify({
-      executiveSummary: "string",
-      transactionOverview: "string",
-      strategicRationale: "string",
-      risks: ["string", "string"],
-      marketImplications: "string",
-      keyTakeaways: ["string", "string", "string"],
-      dealStructure: "string or Not available",
-      confidenceScore: 0,
-      evidenceUsed: ["source headline or URL"],
-      last30daysUsed: false,
-    }, null, 2),
-    "Candidate:",
-    JSON.stringify(input.candidate, null, 2),
-    "Sources:",
-    JSON.stringify(input.sources, null, 2),
-  ].join("\n\n");
-}
-
-function parseEnrichmentJson(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
-  if (typeof value !== "string") return null;
-  const cleaned = value.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    try {
-      const parsed = JSON.parse(match[0]);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch {
-      return null;
-    }
-  }
 }
 
 function validateBriefEnrichment(value: Record<string, unknown>) {
