@@ -2,7 +2,7 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { FunctionReference } from "convex/server";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { AppShell, Panel, StatusBadge, ToolbarButton } from "@/components/app-shell";
 import { useToast } from "@/components/app-toast";
@@ -127,6 +127,19 @@ const reviewCandidates: FunctionReference<
   { externalIds: string[]; action: "approve" | "reject"; reason?: string },
   ReviewCandidatesResult
 > = makeFunctionReference("candidate:reviewCandidates");
+
+type UpdateFactsResult = { updated: boolean; changedFields: string[] };
+
+const updateCandidateFacts: FunctionReference<
+  "mutation",
+  "public",
+  {
+    externalId: string;
+    changes: { field: string; value: string }[];
+    note?: string;
+  },
+  UpdateFactsResult
+> = makeFunctionReference("candidate:updateFacts");
 
 const heroFields = [
   { label: "Company", value: "MediAxis", tone: "teal", mark: "M" },
@@ -277,7 +290,17 @@ function CandidateDetail() {
   const { externalId } = useSearch({ from: "/candidate" });
   const detail = useQuery(getCandidateDetail, { externalId });
   const reviewCandidate = useMutation(reviewCandidates);
+  const saveCandidateFacts = useMutation(updateCandidateFacts);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [draftFacts, setDraftFacts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (detail && !isEditing) {
+      setDraftFacts(Object.fromEntries(detail.facts.map((fact) => [fact.label, fact.value])));
+    }
+  }, [detail, isEditing]);
 
   if (detail === undefined) {
     return (
@@ -298,6 +321,49 @@ function CandidateDetail() {
   }
 
   const view = detail;
+  const visibleFacts = view.facts.map((fact) => ({
+    ...fact,
+    value: isEditing ? draftFacts[fact.label] ?? fact.value : fact.value,
+  }));
+  const changedFacts = view.facts
+    .filter((fact) => isEditing && draftFacts[fact.label] !== undefined && draftFacts[fact.label] !== fact.value)
+    .map((fact) => ({ field: fact.label, value: draftFacts[fact.label] }));
+  const isDirty = changedFacts.length > 0;
+
+  const beginEditing = () => {
+    setDraftFacts(Object.fromEntries(view.facts.map((fact) => [fact.label, fact.value])));
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setDraftFacts(Object.fromEntries(view.facts.map((fact) => [fact.label, fact.value])));
+    setIsEditing(false);
+  };
+
+  const saveFacts = async () => {
+    if (!isDirty || isSaving) return;
+    setIsSaving(true);
+    try {
+      const result = await saveCandidateFacts({
+        externalId: view.candidate.id,
+        changes: changedFacts,
+      });
+      if (result.updated) {
+        success({
+          title: "Facts saved",
+          description: `${result.changedFields.length} fact${result.changedFields.length === 1 ? "" : "s"} updated and added to the audit trail.`,
+        });
+      }
+      setIsEditing(false);
+    } catch (err) {
+      error({
+        title: "Could not save facts",
+        description: err instanceof Error ? err.message : "Unable to persist candidate facts.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const runReviewAction = async (action: "approve" | "reject") => {
     if (isReviewing) {
@@ -341,10 +407,21 @@ function CandidateDetail() {
 
   const actions = (
     <>
-      <ToolbarButton icon={Edit3}>Edit Mode</ToolbarButton>
-      <ToolbarButton icon={X}>Cancel</ToolbarButton>
-      <button className="h-10 rounded-lg border border-hairline bg-surface-1 px-4 text-[12px] text-text-muted cursor-not-allowed">
-        Save Changes
+      <ToolbarButton icon={Edit3} onClick={isEditing ? cancelEditing : beginEditing}>
+        {isEditing ? "Editing" : "Edit Mode"}
+      </ToolbarButton>
+      <ToolbarButton icon={X} onClick={cancelEditing}>
+        Cancel
+      </ToolbarButton>
+      <button
+        type="button"
+        onClick={() => void saveFacts()}
+        disabled={!isEditing || !isDirty || isSaving}
+        className={`h-10 rounded-lg border border-hairline bg-surface-1 px-4 text-[12px] text-text-muted ${
+          isEditing && isDirty && !isSaving ? "text-text-primary hover:bg-surface-hover" : "cursor-not-allowed opacity-50"
+        }`}
+      >
+        {isSaving ? "Saving..." : "Save Changes"}
       </button>
       <button
         type="button"
@@ -397,7 +474,12 @@ function CandidateDetail() {
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_.95fr]">
               <SourceProvenanceCard sources={view.sources} />
-              <ExtractedFactsCard facts={view.facts} />
+              <ExtractedFactsCard
+                facts={visibleFacts}
+                editing={isEditing}
+                onEdit={beginEditing}
+                onChange={(field, value) => setDraftFacts((current) => ({ ...current, [field]: value }))}
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[.9fr_1.1fr]">
@@ -524,9 +606,19 @@ function SourceProvenanceCard({ sources }: { sources: SourceRow[] }) {
                   <TypeChip tone={source.tone} label={source.type} />
                 </td>
                 <td className="py-3 pr-4">
-                  <button className="text-text-muted transition-colors hover:text-lime" aria-label="Open source">
+                  {source.url ? (
+                    <a
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-text-muted transition-colors hover:text-lime"
+                      aria-label={`Open source: ${source.headline}`}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : (
                     <ExternalLink className="h-3.5 w-3.5" />
-                  </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -542,12 +634,26 @@ function SourceProvenanceCard({ sources }: { sources: SourceRow[] }) {
   );
 }
 
-function ExtractedFactsCard({ facts }: { facts: FactRow[] }) {
+function ExtractedFactsCard({
+  facts,
+  editing,
+  onEdit,
+  onChange,
+}: {
+  facts: FactRow[];
+  editing: boolean;
+  onEdit: () => void;
+  onChange: (field: string, value: string) => void;
+}) {
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-3.5">
         <SectionTitle number="2." title="Extracted Facts" />
-        <button className="inline-flex h-8 items-center gap-1.5 rounded-md border border-hairline bg-surface-1 px-3 text-[10.5px] text-text-primary hover:bg-surface-hover">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-hairline bg-surface-1 px-3 text-[10.5px] text-text-primary hover:bg-surface-hover"
+        >
           <Edit3 className="h-3.5 w-3.5" /> Edit Facts
         </button>
       </div>
@@ -560,7 +666,18 @@ function ExtractedFactsCard({ facts }: { facts: FactRow[] }) {
         {facts.map((fact) => (
           <div key={fact.label} className="grid grid-cols-[1fr_1fr_auto] gap-3 px-4 py-2.5 text-[11.5px]">
             <div className="text-text-secondary">{fact.label}</div>
-            <div className="text-text-primary">{fact.value}</div>
+            <div className="text-text-primary">
+              {editing ? (
+                <input
+                  value={fact.value}
+                  onChange={(event) => onChange(fact.label, event.target.value)}
+                  className="h-7 w-full min-w-0 rounded border border-hairline bg-surface-1 px-2 text-[11px] text-text-primary focus:border-lime/60 focus:outline-none"
+                  aria-label={`Edit ${fact.label}`}
+                />
+              ) : (
+                fact.value
+              )}
+            </div>
             <SourceChip source={fact.source} />
           </div>
         ))}

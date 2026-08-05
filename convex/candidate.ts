@@ -138,6 +138,149 @@ export const getDetail = query({
   },
 });
 
+export const updateFacts = mutation({
+  args: {
+    externalId: v.string(),
+    changes: v.array(v.object({ field: v.string(), value: v.string() })),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (args.changes.length === 0) {
+      throw new Error("At least one fact change is required");
+    }
+    if (args.changes.length > 12) {
+      throw new Error("A fact update may contain at most 12 fields");
+    }
+
+    const workspace = await ctx.db
+      .query("workspaces")
+      .withIndex("by_slug", (q) => q.eq("slug", WORKSPACE_SLUG))
+      .unique();
+    if (!workspace) {
+      throw new Error(`Workspace '${WORKSPACE_SLUG}' has not been seeded`);
+    }
+
+    const candidate = await ctx.db
+      .query("dealCandidates")
+      .withIndex("by_workspaceId_and_externalId", (q) =>
+        q.eq("workspaceId", workspace._id).eq("externalId", args.externalId),
+      )
+      .unique();
+    if (!candidate) {
+      throw new Error("Candidate not found");
+    }
+
+    const actor = await ctx.db
+      .query("users")
+      .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspace._id))
+      .filter((q) => q.eq(q.field("email"), "maya.patel@adoptx.local"))
+      .first();
+    const facts = await ctx.db
+      .query("candidateFacts")
+      .withIndex("by_workspaceId_and_candidateId", (q) =>
+        q.eq("workspaceId", workspace._id).eq("candidateId", candidate._id),
+      )
+      .take(24);
+    const factByField = new Map(facts.map((fact) => [fact.field, fact]));
+    const candidatePatch: Partial<Doc<"dealCandidates">> = {};
+    const before: Record<string, string> = {};
+    const after: Record<string, string> = {};
+    const changedFields: string[] = [];
+    const now = Date.now();
+
+    for (const change of args.changes) {
+      const field = change.field;
+      const value = change.value.trim();
+      const property = candidatePropertyFor(field);
+      if (!property) {
+        throw new Error(`The fact '${field}' cannot be edited`);
+      }
+      if (!value || value.length > 500) {
+        throw new Error(`The value for '${field}' must be between 1 and 500 characters`);
+      }
+
+      const previous = factValue(candidate, field, factByField.get(field));
+      if (previous === value) continue;
+      before[field] = previous;
+      after[field] = value;
+      changedFields.push(field);
+
+      if (property === "announcementDate") {
+        const timestamp = Date.parse(value);
+        if (!Number.isFinite(timestamp)) {
+          throw new Error(`The value for '${field}' must be a valid date`);
+        }
+        candidatePatch.announcementDate = timestamp;
+      } else {
+        candidatePatch[property] = value;
+      }
+
+      const existingFact = factByField.get(field);
+      if (existingFact) {
+        await ctx.db.patch(existingFact._id, {
+          value,
+          source: "human",
+          updatedByUserId: actor?._id,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("candidateFacts", {
+          workspaceId: workspace._id,
+          candidateId: candidate._id,
+          field,
+          value,
+          source: "human",
+          updatedByUserId: actor?._id,
+          updatedAt: now,
+        });
+      }
+    }
+
+    if (changedFields.length === 0) {
+      return { updated: false, changedFields: [] };
+    }
+
+    await ctx.db.patch(candidate._id, {
+      ...candidatePatch,
+      updatedAt: now,
+      reviewEdits: {
+        editedByUserId: actor?._id,
+        fields: changedFields,
+        notes: args.note?.trim() || "Updated from Candidate Detail.",
+      },
+    });
+
+    const correlationId = `facts_${candidate.externalId}_${now}`;
+    await ctx.db.insert("reviewAuditEvents", {
+      workspaceId: workspace._id,
+      candidateId: candidate._id,
+      actorType: actor ? "user" : "system",
+      actorUserId: actor?._id,
+      action: "edited candidate facts",
+      before: JSON.stringify(before),
+      after: JSON.stringify(after),
+      reason: args.note?.trim() || "Updated from Candidate Detail.",
+      correlationId,
+      createdAt: now,
+    });
+    await ctx.db.insert("domainEvents", {
+      workspaceId: workspace._id,
+      type: "candidate.facts_updated",
+      version: 1,
+      aggregateType: "dealCandidate",
+      aggregateId: candidate._id,
+      correlationId,
+      actorType: actor ? "user" : "system",
+      actorId: actor?._id ?? "system",
+      data: JSON.stringify({ fields: changedFields, before, after }),
+      source: "adopt-x-ui",
+      createdAt: now,
+    });
+
+    return { updated: true, changedFields };
+  },
+});
+
 export const reviewCandidates = mutation({
   args: {
     externalIds: v.array(v.string()),
@@ -231,6 +374,39 @@ export const reviewCandidates = mutation({
     return { updated, skipped };
   },
 });
+
+function candidatePropertyFor(field: string):
+  | "company"
+  | "target"
+  | "sector"
+  | "geography"
+  | "dealType"
+  | "aiRole"
+  | "announcementDate"
+  | null {
+  const fields = {
+    Company: "company",
+    Target: "target",
+    Sector: "sector",
+    Geography: "geography",
+    "Deal Type": "dealType",
+    "AI Role": "aiRole",
+    "Announcement Date": "announcementDate",
+  } as const;
+  return fields[field as keyof typeof fields] ?? null;
+}
+
+function factValue(
+  candidate: Doc<"dealCandidates">,
+  field: string,
+  fact: Doc<"candidateFacts"> | undefined,
+) {
+  if (fact) return fact.value;
+  if (field === "Announcement Date") return formatDateLabel(candidate.announcementDate);
+  const property = candidatePropertyFor(field);
+  if (!property || property === "announcementDate") return "";
+  return String(candidate[property]);
+}
 
 function candidateRow(candidate: Doc<"dealCandidates">) {
   const target = candidate.target && candidate.target !== "Unknown" ? candidate.target : null;
