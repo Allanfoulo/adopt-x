@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useQuery } from "convex/react";
+import { makeFunctionReference } from "convex/server";
+import type { FunctionReference } from "convex/server";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -52,13 +55,27 @@ type ArchiveRow = {
   status: ArchiveStatus;
 };
 
-const archiveTabs = [
-  { key: "All Briefs", label: "All Briefs", count: 48 },
-  { key: "Approved", label: "Approved", count: 18 },
-  { key: "Generated", label: "Generated", count: 26 },
-  { key: "Draft", label: "Draft", count: 4 },
-  { key: "Archived", label: "Archived", count: 7 },
-] as const;
+type ArchiveTabKey = "All Briefs" | "Approved" | "Generated" | "Draft" | "Archived";
+
+type BriefRunRow = {
+  id: string;
+  status: string;
+  when: string;
+  total: number;
+  completed: number;
+  failed: number;
+  remaining: number;
+  progress: number;
+  error: string | null;
+};
+
+const getArchiveReference: FunctionReference<"query", "public", { limit?: number }, ArchiveRow[]> =
+  makeFunctionReference("briefs:getArchive");
+
+const getBriefRunsReference: FunctionReference<"query", "public", { limit?: number }, BriefRunRow[]> =
+  makeFunctionReference("briefs:getRuns");
+
+const emptyArchiveRows: ArchiveRow[] = [];
 
 const archiveRows: ArchiveRow[] = [
   {
@@ -250,12 +267,24 @@ const briefMetadata = [
 
 function BriefArchive() {
   const { loading, updateToast, info, success } = useToast();
-  const [activeTab, setActiveTab] = useState<(typeof archiveTabs)[number]["key"]>("All Briefs");
-  const [selectedBriefId, setSelectedBriefId] = useState(archiveRows[0].id);
+  const archive = useQuery(getArchiveReference, { limit: 100 });
+  const briefRuns = useQuery(getBriefRunsReference, { limit: 20 });
+  const archiveRows = archive ?? emptyArchiveRows;
+  const archiveTabs = getArchiveTabs(archiveRows);
+  const [activeTab, setActiveTab] = useState<ArchiveTabKey>("All Briefs");
+  const [selectedBriefId, setSelectedBriefId] = useState("");
   const [activeSection, setActiveSection] = useState("Executive Summary");
+
+  useEffect(() => {
+    if (archiveRows.length > 0 && !archiveRows.some((row) => row.id === selectedBriefId)) {
+      setSelectedBriefId(archiveRows[0].id);
+    }
+  }, [archiveRows, selectedBriefId]);
 
   const selectedBrief =
     archiveRows.find((row) => row.id === selectedBriefId) ?? archiveRows[0];
+  const visibleArchiveRows =
+    activeTab === "All Briefs" ? archiveRows : archiveRows.filter((row) => row.status === activeTab);
 
   const startBriefGeneration = () => {
     const toastId = loading({
@@ -309,34 +338,59 @@ function BriefArchive() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_276px] 2xl:grid-cols-[minmax(0,1fr)_292px]">
         <div className="space-y-5">
           <Panel className="overflow-hidden">
-            <BriefArchiveTabs activeTab={activeTab} onChange={setActiveTab} />
+            <BriefArchiveTabs tabs={archiveTabs} activeTab={activeTab} onChange={setActiveTab} />
             <BriefArchiveFilters />
-            <BriefArchiveTable
-              rows={archiveRows}
-              selectedBriefId={selectedBriefId}
-              onSelect={setSelectedBriefId}
-            />
-            <BriefArchiveTableFooter />
+            {archive === undefined ? (
+              <ArchiveState message="Loading generated briefs..." />
+            ) : archiveRows.length === 0 ? (
+              <ArchiveState message="No briefs have been generated yet. Queue a brief from Triage Queue to see it here." />
+            ) : visibleArchiveRows.length === 0 ? (
+              <ArchiveState message={`No ${activeTab.toLowerCase()} briefs yet.`} />
+            ) : (
+              <>
+                <BriefArchiveTable
+                  rows={visibleArchiveRows}
+                  selectedBriefId={selectedBriefId}
+                  onSelect={setSelectedBriefId}
+                />
+                <BriefArchiveTableFooter total={visibleArchiveRows.length} />
+              </>
+            )}
           </Panel>
 
-          <SelectedBriefWorkspace
-            activeSection={activeSection}
-            onSectionChange={setActiveSection}
-            selectedBrief={selectedBrief}
-            onDownload={handleDownload}
-            onShare={handleShare}
-            onViewSources={handleSourceView}
-          />
+          {selectedBrief ? (
+            <SelectedBriefWorkspace
+              activeSection={activeSection}
+              onSectionChange={setActiveSection}
+              selectedBrief={selectedBrief}
+              onDownload={handleDownload}
+              onShare={handleShare}
+              onViewSources={handleSourceView}
+            />
+          ) : null}
         </div>
 
         <div className="space-y-4">
-          <RecentBriefRunsPanel />
+          <RecentBriefRunsPanel rows={briefRuns ?? []} loading={briefRuns === undefined} />
           <BriefArchiveAuditTrailPanel />
           <BriefMetadataPanel />
         </div>
       </div>
     </AppShell>
   );
+}
+
+function getArchiveTabs(rows: readonly ArchiveRow[]) {
+  const labels: readonly ArchiveTabKey[] = ["All Briefs", "Approved", "Generated", "Draft", "Archived"];
+  return labels.map((key) => ({
+    key,
+    label: key,
+    count: key === "All Briefs" ? rows.length : rows.filter((row) => row.status === key).length,
+  }));
+}
+
+function ArchiveState({ message }: { message: string }) {
+  return <div className="px-5 py-12 text-center text-[11px] text-text-secondary">{message}</div>;
 }
 
 function BriefArchiveHeaderActions({ onGenerate }: { onGenerate: () => void }) {
@@ -368,16 +422,18 @@ function BriefArchiveHeaderActions({ onGenerate }: { onGenerate: () => void }) {
 }
 
 function BriefArchiveTabs({
+  tabs,
   activeTab,
   onChange,
 }: {
-  activeTab: (typeof archiveTabs)[number]["key"];
-  onChange: (tab: (typeof archiveTabs)[number]["key"]) => void;
+  tabs: ReturnType<typeof getArchiveTabs>;
+  activeTab: ArchiveTabKey;
+  onChange: (tab: ArchiveTabKey) => void;
 }) {
   return (
     <div className="border-b border-hairline-soft px-4 pt-3 sm:px-5">
       <div className="flex flex-wrap items-center gap-5">
-        {archiveTabs.map((tab) => {
+        {tabs.map((tab) => {
           const active = activeTab === tab.key;
 
           return (
@@ -544,13 +600,13 @@ function BriefArchiveTable({
   );
 }
 
-function BriefArchiveTableFooter() {
+function BriefArchiveTableFooter({ total }: { total: number }) {
   return (
     <div className="border-t border-hairline-soft px-4 py-3 sm:px-5">
       <div className="grid gap-3 text-[10.5px] text-text-secondary lg:grid-cols-[1fr_auto_1fr] lg:items-center">
         <div>
           Showing <span className="mono text-text-primary">1 to 4</span> of{" "}
-          <span className="mono text-text-primary">48</span> results
+          <span className="mono text-text-primary">{total}</span> results
         </div>
         <div className="flex items-center justify-start gap-1 lg:justify-center">
           <PageButton>
@@ -785,7 +841,7 @@ function BriefWorkspaceDetailPane({
   );
 }
 
-function RecentBriefRunsPanel() {
+function RecentBriefRunsPanel({ rows, loading }: { rows: readonly BriefRunRow[]; loading: boolean }) {
   return (
     <Panel>
       <div className="flex items-center justify-between border-b border-hairline-soft px-4 py-4 sm:px-5">
@@ -797,18 +853,20 @@ function RecentBriefRunsPanel() {
         </button>
       </div>
       <div className="space-y-4 px-4 py-4 sm:px-5">
-        {recentBriefRuns.map((run) => (
-          <div key={`${run.company}-${run.version}`} className="flex items-start gap-3">
-            <CompanyMark
-              letter={run.company.charAt(0)}
-              color={run.company.startsWith("Insura") ? "#FF7A66" : run.company.startsWith("Lex") ? "#87A89A" : run.company.startsWith("Medi") ? "#D8D1C0" : "#F4F6FB"}
-              size={24}
-            />
+        {loading ? <div className="text-[10.5px] text-text-secondary">Loading runs...</div> : null}
+        {!loading && rows.length === 0 ? (
+          <div className="text-[10.5px] text-text-secondary">No brief runs yet.</div>
+        ) : null}
+        {rows.map((run) => (
+          <div key={run.id} className="flex items-start gap-3">
+            <CompanyMark letter="B" color="#B7F137" size={24} />
             <div className="min-w-0 flex-1">
-              <div className="text-[10.5px] text-text-primary">{run.company}</div>
+              <div className="truncate text-[10.5px] text-text-primary">{run.id}</div>
               <div className="mt-1 flex items-center gap-2 text-[10px]">
-                <span className="mono text-text-secondary">{run.version}</span>
                 <span style={{ color: getRunTone(run.status).color }}>{run.status}</span>
+                <span className="text-text-secondary">
+                  {run.completed}/{run.total}
+                </span>
               </div>
             </div>
             <div className="mono shrink-0 text-[10px] text-text-secondary">{run.when}</div>

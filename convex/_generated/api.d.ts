@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as briefs from "../briefs.js";
 import type * as candidate from "../candidate.js";
 import type * as dashboard from "../dashboard.js";
 import type * as datasets from "../datasets.js";
@@ -25,6 +26,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  briefs: typeof briefs;
   candidate: typeof candidate;
   dashboard: typeof dashboard;
   datasets: typeof datasets;

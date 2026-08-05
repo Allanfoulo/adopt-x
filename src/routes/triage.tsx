@@ -85,6 +85,12 @@ type RunRow = {
   id: string;
   status: string;
   when: string;
+  total?: number;
+  completed?: number;
+  failed?: number;
+  remaining?: number;
+  progress?: number;
+  error?: string | null;
 };
 
 type OperationalActivity = {
@@ -125,6 +131,22 @@ const getTriageQueue: FunctionReference<"query", "public", { limit?: number }, T
 
 const startScanReference: FunctionReference<"action", "public", {}, { jobId: string | null }> =
   makeFunctionReference("scans:start");
+
+type QueueBriefsResult = { runId: string; queued: number };
+
+const queueBriefsReference: FunctionReference<
+  "mutation",
+  "public",
+  { externalIds: string[] },
+  QueueBriefsResult
+> = makeFunctionReference("briefs:queue");
+
+const getBriefRunsReference: FunctionReference<
+  "query",
+  "public",
+  { limit?: number },
+  RunRow[]
+> = makeFunctionReference("briefs:getRuns");
 
 type ReviewCandidatesResult = {
   updated: number;
@@ -472,6 +494,8 @@ function Triage() {
   const { success, warning, error, info, loading, updateToast } = useToast();
   const queue = useQuery(getTriageQueue, {});
   const reviewSelectedCandidates = useMutation(reviewCandidates);
+  const queueSelectedBriefs = useMutation(queueBriefsReference);
+  const briefRuns = useQuery(getBriefRunsReference, { limit: 50 });
   const startScanAction = useAction(startScanReference);
   const view = buildTriageView(queue);
   const [activeTab, setActiveTab] = useState<TriageTab["key"]>("All");
@@ -479,6 +503,8 @@ function Triage() {
   const [focusedRowId, setFocusedRowId] = useState("dc_002");
   const [railTab, setRailTab] = useState<"Runs" | "Activity">("Runs");
   const [isReviewing, setIsReviewing] = useState(false);
+  const [isQueueingBriefs, setIsQueueingBriefs] = useState(false);
+  const [showAllBriefRuns, setShowAllBriefRuns] = useState(false);
 
   const visibleRows = useMemo(() => {
     if (activeTab === "All") return view.rows;
@@ -618,29 +644,36 @@ function Triage() {
 
   const queueBriefs = () =>
     withSelectionGuard(() => {
-      const toastId = loading({
-        title: `Queueing ${selectedCount} brief${selectedCount === 1 ? "" : "s"}`,
-        description: "Preparing approved candidates for synthesis and provenance packaging.",
-      });
-
-      window.setTimeout(() => {
-        updateToast(toastId, {
-          tone: "info",
-          title: "Brief generation queued",
-          description: `${selectedCount} candidate${selectedCount === 1 ? "" : "s"} added to br_045 for analyst review.`,
-          action: { label: "Open run" },
-          duration: 5200,
-          dismissible: true,
-        });
-      }, 1200);
+      void runQueueBriefs();
     });
 
-  const handleRunClick = (id: string, status: string) => {
-    if (status === "Failed") {
+  const runQueueBriefs = async () => {
+    if (isQueueingBriefs) return;
+    setIsQueueingBriefs(true);
+    try {
+      const result = await queueSelectedBriefs({ externalIds: [...selected] });
+      setSelected(new Set());
+      success({
+        title: "Brief run queued",
+        description: `${result.queued} candidate${result.queued === 1 ? "" : "s"} added to ${result.runId}. Track progress in the Operational Panel.`,
+        action: { label: "View run" },
+      });
+    } catch (err) {
       error({
-        title: `${id} failed`,
-        description: "Cross-source ingest timed out during publisher reputation validation.",
-        action: { label: "View logs" },
+        title: "Could not queue briefs",
+        description: err instanceof Error ? err.message : "Unable to create a brief run.",
+      });
+    } finally {
+      setIsQueueingBriefs(false);
+    }
+  };
+
+  const handleRunClick = (id: string, status: string) => {
+    if (status === "Partial Failed") {
+      error({
+        title: `${id} partially failed`,
+        description: "Some candidates in this brief run failed. Review the row progress and retry those candidates from the queue.",
+        action: { label: "Review queue" },
       });
       return;
     }
@@ -728,7 +761,11 @@ function Triage() {
                   </button>
                   <BulkActionButton label="Approve" accent="success" onClick={approveSelected} />
                   <BulkActionButton label="Reject" accent="danger" onClick={rejectSelected} />
-                  <BulkActionButton label="Queue Brief" accent="lime" onClick={queueBriefs} />
+                  <BulkActionButton
+                    label={isQueueingBriefs ? "Queueing..." : "Queue Brief"}
+                    accent="lime"
+                    onClick={queueBriefs}
+                  />
                   <BulkActionButton label="More" chevron emphasis="neutral" />
                 </div>
                 <button
@@ -925,8 +962,10 @@ function Triage() {
                   />
                   <RunSection
                     title="Brief Runs"
-                    rows={view.operationalRuns.runs.briefs}
+                    rows={(showAllBriefRuns ? briefRuns : briefRuns?.slice(0, 4)) ?? []}
                     onRowClick={handleRunClick}
+                    onViewAll={() => setShowAllBriefRuns((value) => !value)}
+                    viewAll={showAllBriefRuns}
                   />
                 </div>
               ) : (
@@ -1173,17 +1212,21 @@ function RunSection({
   title,
   rows,
   onRowClick,
+  onViewAll,
+  viewAll = false,
 }: {
   title: string;
-  rows: readonly { id: string; status: string; when: string }[];
+  rows: readonly RunRow[];
   onRowClick: (id: string, status: string) => void;
+  onViewAll?: () => void;
+  viewAll?: boolean;
 }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[11px] font-medium text-text-primary">{title}</div>
-        <button type="button" className="text-[10px] text-info hover:text-lime">
-          View all
+        <button type="button" onClick={onViewAll} className="text-[10px] text-info hover:text-lime">
+          {viewAll ? "Show recent" : "View all"}
         </button>
       </div>
       <div className="space-y-2">
@@ -1192,24 +1235,41 @@ function RunSection({
           const Icon = style.icon;
 
           return (
-            <button
-              key={row.id}
-              type="button"
-              onClick={() => onRowClick(row.id, row.status)}
-              className="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-surface-hover/35"
-            >
-              <span className="mono min-w-0 flex-1 truncate text-[10.5px] text-text-secondary">
-                {row.id}
-              </span>
-              <span
-                className="inline-flex min-w-[74px] items-center gap-1 text-[10px]"
-                style={{ color: style.color }}
+            <div key={row.id}>
+              <button
+                type="button"
+                onClick={() => onRowClick(row.id, row.status)}
+                className="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-surface-hover/35"
               >
-                <Icon className={`h-3.5 w-3.5 ${row.status === "Running" ? "animate-spin" : ""}`} />
-                {row.status}
-              </span>
-              <span className="mono shrink-0 text-[10px] text-text-muted">{row.when}</span>
-            </button>
+                <span className="mono min-w-0 flex-1 truncate text-[10.5px] text-text-secondary">
+                  {row.id}
+                </span>
+                <span
+                  className="inline-flex min-w-[74px] items-center gap-1 text-[10px]"
+                  style={{ color: style.color }}
+                >
+                  <Icon className={`h-3.5 w-3.5 ${row.status === "Running" ? "animate-spin" : ""}`} />
+                  {row.status}
+                </span>
+                <span className="mono shrink-0 text-[10px] text-text-muted">{row.when}</span>
+              </button>
+              {row.progress !== undefined && (
+                <div className="ml-7 mr-1 space-y-1">
+                  <div className="h-1 overflow-hidden rounded-full bg-white/8">
+                    <div
+                      className="h-full rounded-full bg-lime transition-[width] duration-300"
+                      style={{ width: `${row.progress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-text-muted">
+                    <span>
+                      {row.completed ?? 0} completed / {row.total ?? 0} total
+                    </span>
+                    <span>{row.progress}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
