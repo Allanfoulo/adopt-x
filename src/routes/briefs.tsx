@@ -864,8 +864,8 @@ function BriefWorkspaceSummaryPane({
             <div className="space-y-3">
               {auditTrail.length === 0 ? (
                 <div className="text-[11px] text-text-secondary">No revision events recorded.</div>
-              ) : auditTrail.map((entry) => (
-                <div key={`${entry.actor}-${entry.when}`} className="border-b border-hairline-soft pb-3 text-[11px]">
+              ) : auditTrail.map((entry, index) => (
+                <div key={`${entry.actor}-${entry.when}-${index}`} className="border-b border-hairline-soft pb-3 text-[11px]">
                   <div className="text-text-primary">{entry.actor} {entry.action}</div>
                   <div className="mt-1 text-text-secondary">{entry.detail}</div>
                 </div>
@@ -1006,8 +1006,8 @@ function RecentBriefRunsPanel({ rows, loading }: { rows: readonly BriefRunRow[];
         {!loading && rows.length === 0 ? (
           <div className="text-[10.5px] text-text-secondary">No brief runs yet.</div>
         ) : null}
-        {rows.map((run) => (
-          <div key={run.id} className="flex items-start gap-3">
+        {rows.map((run, index) => (
+          <div key={`${run.id}-${index}`} className="flex items-start gap-3">
             <CompanyMark letter="B" color="#B7F137" size={24} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[10.5px] text-text-primary">{run.id}</div>
@@ -1042,8 +1042,8 @@ function BriefArchiveAuditTrailPanel({ detail }: { detail: ArchiveDetail | null 
         {entries.length === 0 ? (
           <div className="text-[10.5px] text-text-secondary">No audit events recorded for this brief.</div>
         ) : null}
-        {entries.map((entry) => (
-          <div key={`${entry.actor}-${entry.when}`} className="flex items-start gap-3">
+        {entries.map((entry, index) => (
+          <div key={`${entry.actor}-${entry.when}-${index}`} className="flex items-start gap-3">
             <div
               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${
                 entry.system ? "text-lime" : "text-primary-foreground"

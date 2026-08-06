@@ -1041,7 +1041,7 @@ function Triage() {
                 <div className="space-y-0">
                   {view.auditTrail.map((entry, index) => (
                     <AuditItem
-                      key={`${entry.actor}-${entry.when}`}
+                      key={`${entry.actor}-${entry.when}-${index}`}
                       entry={entry}
                       isLast={index === view.auditTrail.length - 1}
                     />

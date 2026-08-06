@@ -991,8 +991,8 @@ function OverviewAuditTrailPanel({ entries }: { entries: AuditTrailEntry[] }) {
         </button>
       </div>
       <div className="space-y-4 px-4 py-4 sm:px-5">
-        {entries.map((entry) => (
-          <div key={`${entry.actor}-${entry.when}`} className="flex items-start gap-3">
+        {entries.map((entry, index) => (
+          <div key={`${entry.actor}-${entry.when}-${index}`} className="flex items-start gap-3">
             <div
               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${
                 entry.system ? "text-lime" : "text-primary-foreground"
