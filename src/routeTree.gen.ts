@@ -15,6 +15,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CandidateRouteImport } from './routes/candidate'
 import { Route as BriefsRouteImport } from './routes/briefs'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BriefsExternalIdRouteImport } from './routes/briefs.$externalId'
 import { Route as ApiBriefsEnrichRouteImport } from './routes/api/briefs/enrich'
 
 const TriageRoute = TriageRouteImport.update({
@@ -47,6 +48,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BriefsExternalIdRoute = BriefsExternalIdRouteImport.update({
+  id: '/$externalId',
+  path: '/$externalId',
+  getParentRoute: () => BriefsRoute,
+} as any)
 const ApiBriefsEnrichRoute = ApiBriefsEnrichRouteImport.update({
   id: '/api/briefs/enrich',
   path: '/api/briefs/enrich',
@@ -55,30 +61,33 @@ const ApiBriefsEnrichRoute = ApiBriefsEnrichRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/briefs': typeof BriefsRoute
+  '/briefs': typeof BriefsRouteWithChildren
   '/candidate': typeof CandidateRoute
   '/dashboard': typeof DashboardRoute
   '/settings': typeof SettingsRoute
   '/triage': typeof TriageRoute
+  '/briefs/$externalId': typeof BriefsExternalIdRoute
   '/api/briefs/enrich': typeof ApiBriefsEnrichRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/briefs': typeof BriefsRoute
+  '/briefs': typeof BriefsRouteWithChildren
   '/candidate': typeof CandidateRoute
   '/dashboard': typeof DashboardRoute
   '/settings': typeof SettingsRoute
   '/triage': typeof TriageRoute
+  '/briefs/$externalId': typeof BriefsExternalIdRoute
   '/api/briefs/enrich': typeof ApiBriefsEnrichRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/briefs': typeof BriefsRoute
+  '/briefs': typeof BriefsRouteWithChildren
   '/candidate': typeof CandidateRoute
   '/dashboard': typeof DashboardRoute
   '/settings': typeof SettingsRoute
   '/triage': typeof TriageRoute
+  '/briefs/$externalId': typeof BriefsExternalIdRoute
   '/api/briefs/enrich': typeof ApiBriefsEnrichRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/settings'
     | '/triage'
+    | '/briefs/$externalId'
     | '/api/briefs/enrich'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/settings'
     | '/triage'
+    | '/briefs/$externalId'
     | '/api/briefs/enrich'
   id:
     | '__root__'
@@ -108,12 +119,13 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/settings'
     | '/triage'
+    | '/briefs/$externalId'
     | '/api/briefs/enrich'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  BriefsRoute: typeof BriefsRoute
+  BriefsRoute: typeof BriefsRouteWithChildren
   CandidateRoute: typeof CandidateRoute
   DashboardRoute: typeof DashboardRoute
   SettingsRoute: typeof SettingsRoute
@@ -165,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/briefs/$externalId': {
+      id: '/briefs/$externalId'
+      path: '/$externalId'
+      fullPath: '/briefs/$externalId'
+      preLoaderRoute: typeof BriefsExternalIdRouteImport
+      parentRoute: typeof BriefsRoute
+    }
     '/api/briefs/enrich': {
       id: '/api/briefs/enrich'
       path: '/api/briefs/enrich'
@@ -175,9 +194,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface BriefsRouteChildren {
+  BriefsExternalIdRoute: typeof BriefsExternalIdRoute
+}
+
+const BriefsRouteChildren: BriefsRouteChildren = {
+  BriefsExternalIdRoute: BriefsExternalIdRoute,
+}
+
+const BriefsRouteWithChildren =
+  BriefsRoute._addFileChildren(BriefsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  BriefsRoute: BriefsRoute,
+  BriefsRoute: BriefsRouteWithChildren,
   CandidateRoute: CandidateRoute,
   DashboardRoute: DashboardRoute,
   SettingsRoute: SettingsRoute,
