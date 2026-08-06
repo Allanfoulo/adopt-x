@@ -84,8 +84,11 @@ export const Route = createFileRoute("/api/briefs/enrich")({
 
 function buildPrompt(input: z.infer<typeof requestSchema>): string {
   return [
-    "Generate an analyst-ready Adopt X brief from this candidate and public evidence.",
+    "Generate a detailed, decision-ready Adopt X investment banking brief from this candidate and public evidence.",
+    "Apply this framework: facts, capability purchased, build versus buy, market change, value drivers, synergy map, risk buckets, market signal, follow the money, second-order effects, startup opportunities, product ideas, and investment thesis.",
     "Use the last30days-research tool for secondary context when available, but never treat it as proof of the deal.",
+    "Use precise evidence limits. For unsupported opportunities write 'No defensible opportunity identified from the available evidence'. For unsupported theses write 'Preliminary thesis only; confidence is low because evidence is limited'. Never invent facts and never say 'I can't think of'.",
+    "Write detailed prose suitable for a multi-page investment banking brief, not a short summary.",
     "Return only valid JSON with exactly these keys. Do not use markdown.",
     JSON.stringify({
       executiveSummary: "string",
@@ -98,6 +101,21 @@ function buildPrompt(input: z.infer<typeof requestSchema>): string {
       confidenceScore: 0,
       evidenceUsed: ["source headline or URL"],
       last30daysUsed: false,
+      analysis: {
+        capabilityPurchased: ["capability, not a feature"],
+        buildVsBuy: "why buying was preferred to internal development",
+        marketChange: "market change forcing the transaction",
+        valueDrivers: ["technology, customers, talent, distribution, data, or regulation"],
+        strategicRationalePoints: [{ title: "reason", detail: "evidence-backed explanation" }],
+        synergyMap: [{ category: "Revenue | Cost | Strategic", items: ["specific synergy"] }],
+        riskAnalysis: [{ category: "Integration", title: "risk", detail: "impact", mitigation: "mitigation" }],
+        marketSignal: "what this deal signals about tomorrow",
+        followTheMoney: [{ title: "stakeholder", detail: "who benefits financially and how" }],
+        secondOrderEffects: [{ question: "What becomes easier?", answer: "evidence-backed effect" }],
+        startupOpportunities: [{ title: "opportunity", detail: "hypothesis or evidence", confidence: "High | Medium | Low" }],
+        productIdeas: [{ title: "product idea", detail: "hypothesis or evidence", confidence: "High | Medium | Low" }],
+        investmentThesis: "decision-ready thesis with explicit evidence limits",
+      },
     }, null, 2),
     "Candidate:",
     JSON.stringify(input.candidate, null, 2),

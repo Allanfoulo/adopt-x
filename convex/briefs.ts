@@ -10,6 +10,23 @@ import {
 } from "./_generated/server";
 import { formatDateLabel, getDemoWorkspaceId, titleCase, WORKSPACE_SLUG } from "./model";
 
+const analysisPointValidator = v.object({ title: v.string(), detail: v.string() });
+const analysisValidator = v.object({
+  capabilityPurchased: v.array(v.string()),
+  buildVsBuy: v.string(),
+  marketChange: v.string(),
+  valueDrivers: v.array(v.string()),
+  strategicRationalePoints: v.array(analysisPointValidator),
+  synergyMap: v.array(v.object({ category: v.string(), items: v.array(v.string()) })),
+  riskAnalysis: v.array(v.object({ category: v.string(), title: v.string(), detail: v.string(), mitigation: v.string() })),
+  marketSignal: v.string(),
+  followTheMoney: v.array(analysisPointValidator),
+  secondOrderEffects: v.array(v.object({ question: v.string(), answer: v.string() })),
+  startupOpportunities: v.array(v.object({ title: v.string(), detail: v.string(), confidence: v.string() })),
+  productIdeas: v.array(v.object({ title: v.string(), detail: v.string(), confidence: v.string() })),
+  investmentThesis: v.string(),
+});
+
 const briefEnrichmentValidator = v.object({
   executiveSummary: v.string(),
   transactionOverview: v.string(),
@@ -21,6 +38,7 @@ const briefEnrichmentValidator = v.object({
   confidenceScore: v.number(),
   evidenceUsed: v.array(v.string()),
   last30daysUsed: v.boolean(),
+  analysis: analysisValidator,
 });
 
 export const queue = mutation({
@@ -266,6 +284,7 @@ export const getArchiveDetail = query({
         dealStructure: brief.dealStructure ?? "Not available",
         confidenceScore: brief.confidenceScore ?? null,
         last30daysUsed: brief.last30daysUsed ?? false,
+        analysis: brief.analysis ?? null,
         version: `v${brief.version}`,
         status: titleCase(brief.status),
         updatedAt: brief.updatedAt,
@@ -381,6 +400,7 @@ export const completeCandidate = internalMutation({
       sourcesSnapshot: sources.map((source) => source._id),
       confidenceScore: args.enrichment.confidenceScore,
       last30daysUsed: args.enrichment.last30daysUsed,
+      analysis: args.enrichment.analysis,
       createdAt: now,
       updatedAt: now,
     });
@@ -479,6 +499,22 @@ type BriefEnrichmentInput = {
   }[];
 };
 
+type BriefAnalysis = {
+  capabilityPurchased: string[];
+  buildVsBuy: string;
+  marketChange: string;
+  valueDrivers: string[];
+  strategicRationalePoints: { title: string; detail: string }[];
+  synergyMap: { category: string; items: string[] }[];
+  riskAnalysis: { category: string; title: string; detail: string; mitigation: string }[];
+  marketSignal: string;
+  followTheMoney: { title: string; detail: string }[];
+  secondOrderEffects: { question: string; answer: string }[];
+  startupOpportunities: { title: string; detail: string; confidence: string }[];
+  productIdeas: { title: string; detail: string; confidence: string }[];
+  investmentThesis: string;
+};
+
 async function generateBriefEnrichment(input: BriefEnrichmentInput) {
   const baseUrl = process.env.APP_GATEWAY_URL?.replace(/\/$/, "");
   if (!baseUrl) {
@@ -530,6 +566,9 @@ function validateBriefEnrichment(value: Record<string, unknown>) {
     throw new Error("Mastra enrichment returned an invalid confidenceScore.");
   }
   if (typeof value.last30daysUsed !== "boolean") throw new Error("Mastra enrichment missing last30daysUsed.");
+  if (!value.analysis || typeof value.analysis !== "object" || Array.isArray(value.analysis)) {
+    throw new Error("Mastra enrichment missing analysis sections.");
+  }
   return {
     executiveSummary: text("executiveSummary"),
     transactionOverview: text("transactionOverview"),
@@ -541,6 +580,7 @@ function validateBriefEnrichment(value: Record<string, unknown>) {
     confidenceScore,
     evidenceUsed: list("evidenceUsed", 1),
     last30daysUsed: value.last30daysUsed,
+    analysis: value.analysis as BriefAnalysis,
   };
 }
 
