@@ -262,7 +262,10 @@ export const getArchiveDetail = query({
         risks: brief.risks,
         marketImplications: brief.marketImplications,
         keyTakeaways: brief.keyTakeaways,
+        evidenceUsed: brief.evidenceUsed ?? [],
+        dealStructure: brief.dealStructure ?? "Not available",
         confidenceScore: brief.confidenceScore ?? null,
+        last30daysUsed: brief.last30daysUsed ?? false,
         version: `v${brief.version}`,
         status: titleCase(brief.status),
         updatedAt: brief.updatedAt,
@@ -373,14 +376,20 @@ export const completeCandidate = internalMutation({
       risks: args.enrichment.risks,
       marketImplications: args.enrichment.marketImplications,
       keyTakeaways: args.enrichment.keyTakeaways,
+      evidenceUsed: args.enrichment.evidenceUsed,
       dealStructure: args.enrichment.dealStructure,
       sourcesSnapshot: sources.map((source) => source._id),
       confidenceScore: args.enrichment.confidenceScore,
+      last30daysUsed: args.enrichment.last30daysUsed,
       createdAt: now,
       updatedAt: now,
     });
     await ctx.db.patch(candidate._id, { status: "brief_ready", briefId, updatedAt: now });
-    await ctx.db.patch(args.briefRunId, { status: "completed", completedAt: now });
+    await ctx.db.patch(args.briefRunId, {
+      status: "completed",
+      completedAt: now,
+      last30daysUsed: args.enrichment.last30daysUsed,
+    });
   },
 });
 

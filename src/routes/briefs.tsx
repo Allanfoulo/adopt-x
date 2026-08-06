@@ -78,7 +78,10 @@ type ArchiveDetail = {
     risks: string[];
     marketImplications: string;
     keyTakeaways: string[];
+    evidenceUsed: string[];
+    dealStructure: string;
     confidenceScore: number | null;
+    last30daysUsed: boolean;
     version: string;
     status: string;
     updatedAt: number;
@@ -752,7 +755,7 @@ function SelectedBriefWorkspace({
           onSectionChange={onSectionChange}
           detail={detail}
         />
-        <BriefWorkspaceSummaryPane detail={detail} />
+        <BriefWorkspaceSummaryPane detail={detail} activeSection={activeSection} />
         <BriefWorkspaceDetailPane detail={detail} onViewSources={onViewSources} />
       </div>
     </Panel>
@@ -805,10 +808,77 @@ function BriefWorkspaceSectionNav({
   );
 }
 
-function BriefWorkspaceSummaryPane({ detail }: { detail: ArchiveDetail | null | undefined }) {
+function BriefWorkspaceSummaryPane({
+  detail,
+  activeSection,
+}: {
+  detail: ArchiveDetail | null | undefined;
+  activeSection: string;
+}) {
   const confidenceScore = detail?.brief.confidenceScore;
   const summary = detail?.brief.executiveSummary ?? "Loading brief details...";
   const takeaways = detail?.brief.keyTakeaways ?? [];
+  const risks = detail?.brief.risks ?? [];
+  const evidence = detail?.brief.evidenceUsed ?? [];
+  const auditTrail = detail?.auditTrail ?? [];
+
+  if (activeSection !== "Executive Summary") {
+    const paragraph =
+      activeSection === "Transaction Overview"
+        ? detail?.brief.transactionOverview
+        : activeSection === "Strategic Rationale"
+          ? detail?.brief.strategicRationale
+          : activeSection === "Market Implications"
+            ? detail?.brief.marketImplications
+            : null;
+    const list = activeSection === "Risks & Mitigations"
+      ? risks
+      : activeSection === "Key Takeaways"
+        ? takeaways
+        : activeSection === "Sources & Inputs"
+          ? evidence
+          : [];
+
+    return (
+      <div className="border-b border-hairline-soft p-4 sm:p-5 xl:border-b-0 xl:border-r">
+        <div className="space-y-4">
+          <div>
+            <div className="text-[12px] font-semibold text-text-primary">{activeSection}</div>
+            <div className="mt-1 text-[10px] text-text-muted">
+              {detail?.brief.last30daysUsed && activeSection === "Sources & Inputs"
+                ? "Includes last 30 days public-context enrichment"
+                : "Generated from the verified candidate evidence"}
+            </div>
+          </div>
+          {paragraph ? <p className="text-[12px] leading-6 text-text-secondary">{paragraph}</p> : null}
+          {list.length > 0 ? (
+            <div className="space-y-3">
+              {list.map((item) => (
+                <div key={item} className="rounded-lg border border-hairline-soft bg-surface-2/40 px-3 py-3 text-[11px] leading-5 text-text-secondary">
+                  {item}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {activeSection === "Revision History" ? (
+            <div className="space-y-3">
+              {auditTrail.length === 0 ? (
+                <div className="text-[11px] text-text-secondary">No revision events recorded.</div>
+              ) : auditTrail.map((entry) => (
+                <div key={`${entry.actor}-${entry.when}`} className="border-b border-hairline-soft pb-3 text-[11px]">
+                  <div className="text-text-primary">{entry.actor} {entry.action}</div>
+                  <div className="mt-1 text-text-secondary">{entry.detail}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {!paragraph && list.length === 0 && activeSection !== "Revision History" ? (
+            <div className="text-[11px] text-text-secondary">No generated content is available for this section.</div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="border-b border-hairline-soft p-4 sm:p-5 xl:border-b-0 xl:border-r">
