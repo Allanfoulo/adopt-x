@@ -31,7 +31,6 @@ import {
   statusStyles,
 } from "@/components/app-shell";
 import { useToast } from "@/components/app-toast";
-import { buildBriefPdf, slugify } from "@/lib/brief-pdf";
 import type { ArchiveDetail, ArchiveRow, BriefPoint } from "@/lib/brief-types";
 
 export const Route = createFileRoute("/briefs")({
@@ -258,14 +257,14 @@ const briefMetadata = [
 
 function BriefArchive() {
   const navigate = useNavigate();
-  const { loading, updateToast, info, success } = useToast();
+  const { loading, updateToast } = useToast();
   const archive = useQuery(getArchiveReference, { limit: 100 });
   const briefRuns = useQuery(getBriefRunsReference, { limit: 20 });
   const archiveRows = archive ?? emptyArchiveRows;
   const archiveTabs = getArchiveTabs(archiveRows);
   const [activeTab, setActiveTab] = useState<ArchiveTabKey>("All Briefs");
   const [selectedBriefId, setSelectedBriefId] = useState("");
-  const [activeSection, setActiveSection] = useState("Executive Summary");
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
 
   useEffect(() => {
     if (archiveRows.length > 0 && !archiveRows.some((row) => row.id === selectedBriefId)) {
@@ -273,17 +272,16 @@ function BriefArchive() {
     }
   }, [archiveRows, selectedBriefId]);
 
-  const selectedBrief =
-    archiveRows.find((row) => row.id === selectedBriefId) ?? archiveRows[0];
-  const selectedDetail = useQuery(
-    getArchiveDetailReference,
-    selectedBrief ? { externalId: selectedBrief.id } : "skip",
-  );
   const openBrief = (externalId: string) => {
     void navigate({ to: "/briefs/$externalId", params: { externalId } });
   };
   const visibleArchiveRows =
     activeTab === "All Briefs" ? archiveRows : archiveRows.filter((row) => row.status === activeTab);
+  const selectedBrief = archiveRows.find((row) => row.id === selectedBriefId) ?? archiveRows[0];
+  const selectedDetail = useQuery(
+    getArchiveDetailReference,
+    selectedBrief ? { externalId: selectedBrief.id } : "skip",
+  );
 
   const startBriefGeneration = () => {
     const toastId = loading({
@@ -302,48 +300,6 @@ function BriefArchive() {
         dismissible: true,
       });
     }, 1400);
-  };
-
-  const handleDownload = async () => {
-    if (!selectedDetail) {
-      info({ title: "Brief is still loading", description: "Wait for the live brief details before downloading." });
-      return;
-    }
-    try {
-      const bytes = await buildBriefPdf(selectedDetail, selectedBrief);
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${slugify(selectedBrief.company)}-${slugify(selectedBrief.target)}-brief.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
-      success({
-        title: "Brief PDF downloaded",
-        description: `${selectedBrief.company} / ${selectedBrief.target} was exported with the full analysis framework.`,
-      });
-    } catch (error) {
-      info({
-        title: "Could not create PDF",
-        description: error instanceof Error ? error.message : "The brief export failed.",
-      });
-    }
-  };
-
-  const handleShare = () => {
-    info({
-      title: "Share link copied",
-      description: "Internal archive access was copied with the current selected brief context.",
-      action: { label: "Manage access", emphasis: "secondary" },
-    });
-  };
-
-  const handleSourceView = () => {
-    info({
-      title: "Source set opened",
-      description: "Opening the full provenance bundle for the selected brief.",
-      action: { label: "View all sources", emphasis: "secondary" },
-    });
   };
 
   return (
@@ -370,24 +326,14 @@ function BriefArchive() {
                   selectedBriefId={selectedBriefId}
                   onSelect={setSelectedBriefId}
                   onOpen={openBrief}
+                  openActionsId={openActionsId}
+                  onToggleActions={(id) => setOpenActionsId((current) => current === id ? null : id)}
                 />
                 <BriefArchiveTableFooter total={visibleArchiveRows.length} />
               </>
             )}
           </Panel>
 
-          {selectedBrief ? (
-            <SelectedBriefWorkspace
-              activeSection={activeSection}
-              onSectionChange={setActiveSection}
-              selectedBrief={selectedBrief}
-              detail={selectedDetail}
-              onDownload={handleDownload}
-              onShare={handleShare}
-              onViewSources={handleSourceView}
-              onOpen={() => openBrief(selectedBrief.id)}
-            />
-          ) : null}
         </div>
 
         <div className="space-y-4">
@@ -510,11 +456,15 @@ function BriefArchiveTable({
   selectedBriefId,
   onSelect,
   onOpen,
+  openActionsId,
+  onToggleActions,
 }: {
   rows: ArchiveRow[];
   selectedBriefId: string;
   onSelect: (id: string) => void;
   onOpen: (id: string) => void;
+  openActionsId: string | null;
+  onToggleActions: (id: string) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -611,15 +561,34 @@ function BriefArchiveTable({
                 <td className="py-3 pr-3">
                   <StatusBadge status={row.status} size="xs" />
                 </td>
-                <td className="py-3 pr-4 sm:pr-5">
+                <td className="relative py-3 pr-4 sm:pr-5">
                   <button
                     type="button"
                     className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-text-muted transition-colors hover:border-hairline hover:bg-surface-hover hover:text-text-primary"
                     aria-label={`More actions for ${row.company}`}
-                    onClick={(event) => event.stopPropagation()}
+                    aria-expanded={openActionsId === row.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleActions(row.id);
+                    }}
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
+                  {openActionsId === row.id ? (
+                    <div className="absolute right-4 top-11 z-20 min-w-[142px] rounded-lg border border-hairline bg-surface-2 p-1.5 shadow-xl shadow-black/30 sm:right-5">
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-md px-3 py-2 text-left text-[10.5px] text-text-primary hover:bg-surface-hover"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggleActions(row.id);
+                          onOpen(row.id);
+                        }}
+                      >
+                        Open brief
+                      </button>
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             );
@@ -674,7 +643,6 @@ function SelectedBriefWorkspace({
   onDownload,
   onShare,
   onViewSources,
-  onOpen,
 }: {
   activeSection: string;
   onSectionChange: (section: string) => void;
@@ -683,7 +651,6 @@ function SelectedBriefWorkspace({
   onDownload: () => void;
   onShare: () => void;
   onViewSources: () => void;
-  onOpen: () => void;
 }) {
   return (
     <Panel className="overflow-hidden">
@@ -722,9 +689,6 @@ function SelectedBriefWorkspace({
             </WorkspaceActionButton>
             <WorkspaceActionButton icon={Share2} onClick={onShare}>
               Share
-            </WorkspaceActionButton>
-            <WorkspaceActionButton icon={ChevronRight} onClick={onOpen}>
-              Open brief
             </WorkspaceActionButton>
             <IconGhostButton ariaLabel="More brief actions">
               <Ellipsis className="h-4 w-4" />
