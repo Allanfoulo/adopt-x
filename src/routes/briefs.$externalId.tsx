@@ -183,7 +183,7 @@ function BriefReaderContent({ detail }: { detail: ArchiveDetail }) {
       <ReaderSection id="Startup Opportunities" title="Startup Opportunities"><ReaderOpportunities items={analysis?.startupOpportunities} emptyReason="No defensible startup opportunity was identified from the available evidence; the source does not establish a validated market gap or unmet need." /></ReaderSection>
       <ReaderSection id="Product Ideas" title="Product Ideas"><ReaderOpportunities items={analysis?.productIdeas} emptyReason="No defensible product idea was identified from the available evidence; the source does not establish a specific workflow problem or buyer demand." /></ReaderSection>
       <ReaderSection id="Investment Thesis" title="Investment Thesis"><p>{analysis?.investmentThesis ?? fallback()}</p></ReaderSection>
-      <ReaderSection id="Sources & Inputs" title="Sources & Inputs"><ReaderBullets items={[...detail.brief.evidenceUsed, ...detail.sources.map((source) => `${source.publisher}: ${source.headline}`)]} /></ReaderSection>
+      <ReaderSection id="Sources & Inputs" title="Sources & Inputs" subtitle="Public sources used to corroborate the brief"><ReaderSourceList detail={detail} /></ReaderSection>
       <ReaderSection id="Revision History" title="Revision History"><div className="space-y-3">{detail.auditTrail.length ? detail.auditTrail.map((entry, index) => <ReaderCard key={`${entry.when}-${index}`} title={`${entry.actor} ${entry.action}`} detail={`${entry.detail} (${entry.when})`} />) : <p>No revision events recorded.</p>}</div></ReaderSection>
     </div>
   );
@@ -198,6 +198,35 @@ function ReaderPoints({ items, emptyReason }: { items?: BriefPoint[]; emptyReaso
 function ReaderOpportunities({ items, emptyReason }: { items?: BriefOpportunity[]; emptyReason?: string }) { return items?.length ? <div className="grid gap-3 md:grid-cols-2">{items.map((item) => <ReaderCard key={item.title} title={`${item.title} (${item.confidence} confidence)`} detail={item.detail} />)}</div> : <ReaderEmpty reason={emptyReason ?? fallback()} />; }
 function ReaderCard({ title, detail }: { title: string; detail: string }) { return <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-3"><div className="font-medium text-text-primary">{title}</div><div className="mt-1 text-[11px] leading-5 text-text-secondary">{detail}</div></div>; }
 function ReaderEmpty({ reason }: { reason: string }) { return <div className="rounded-lg border border-dashed border-hairline bg-surface-2/25 px-3 py-3 text-[11px] leading-5 text-text-secondary">{reason}</div>; }
+function ReaderSourceList({ detail }: { detail: ArchiveDetail }) {
+  if (!detail.sources.length && !detail.brief.evidenceUsed.length) {
+    return <ReaderEmpty reason="No cited source records are available to corroborate this brief." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {detail.sources.length ? detail.sources.map((source) => (
+        <a key={`${source.publisher}-${source.headline}-${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="block rounded-lg border border-hairline-soft bg-surface-2/35 p-3 transition-colors hover:border-lime/35 hover:bg-surface-hover">
+          <div className="flex items-start gap-2">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium text-text-primary">{source.headline}</div>
+              <div className="mt-1 text-[10px] text-text-secondary">{source.publisher} · {source.date} · {source.type}</div>
+              <div className="mt-2 break-all text-[10px] leading-5 text-lime/80">{source.url}</div>
+            </div>
+            <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" />
+          </div>
+        </a>
+      )) : null}
+      {detail.brief.evidenceUsed.length ? (
+        <div className="rounded-lg border border-hairline-soft bg-surface-2/25 p-3">
+          <div className="text-[11px] font-medium text-text-primary">Evidence notes used in the analysis</div>
+          <ReaderBullets items={detail.brief.evidenceUsed} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 function ReaderFacts({ title, items }: { title: string; items: { label: string; value: string }[] }) { return <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4"><div className="text-[12px] font-medium text-text-primary">{title}</div><div className="mt-4 space-y-2.5">{items.map((item) => <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 text-[10.5px]"><div className="text-text-secondary">{item.label}</div><div className="text-text-primary">{item.value}</div></div>)}</div></div>; }
 function ReaderState({ message }: { message: string }) { return <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-12 text-center text-[12px] text-text-secondary">{message}</div>; }
 function fallback() { return "No defensible conclusion identified from the available evidence."; }
