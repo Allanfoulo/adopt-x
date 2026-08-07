@@ -6,7 +6,7 @@ This folder includes a `wmill.yaml` sync configuration. From a machine with the 
 
 ## Initial flow
 
-1. Schedule `f/collectors/public_feed.ts` every 1-2 hours for configured feeds.
+1. Schedule `f/flows/run_scheduled_scan.ts` every 1-2 hours for configured feeds.
 2. Pass the returned items to `f/flows/scan_adoption_deals.ts`.
 3. The flow calls `ingest:ingestSourceBatch`, which is idempotent by external id and content hash.
 4. A downstream Mastra run normalizes candidates and scores AI-adoption relevance.
@@ -19,6 +19,24 @@ This folder includes a `wmill.yaml` sync configuration. From a machine with the 
 - `LAST30DAYS_SKILL_DIR`: Windmill worker path containing `scripts/last30days.py`.
 - `LAST30DAYS_PYTHON`: optional Python executable path; defaults to `python3`.
 - Provider keys belong in Windmill resources/secrets, not in source files.
+
+`ADOPTX_FEEDS_JSON` supports the existing feed array format and a registry format:
+
+```json
+{
+  "sourceKeys": [
+    "sec_press_releases",
+    "google_news_ai_adoption",
+    "google_news_ai_acquisitions",
+    "google_news_ai_partnerships",
+    "google_news_ai_investments"
+  ]
+}
+```
+
+The registry currently includes SEC press releases and separate Google News discovery feeds for adoption, acquisitions, partnerships, and investments. Unknown or planned source keys are reported as unconfigured instead of being silently enabled. Existing arrays of explicit `{ sourceType, publisher, url, sourceClass }` feed objects remain supported.
+
+Feed failures are returned per publisher. The scan continues when at least one configured source succeeds and fails only when every configured source is unavailable.
 
 ## Source rollout
 

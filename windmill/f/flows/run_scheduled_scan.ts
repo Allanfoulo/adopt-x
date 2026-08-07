@@ -1,4 +1,5 @@
-import { main as collectFeeds, type FeedConfig } from "../collectors/public_feed.ts";
+import { collectFeedsWithDiagnostics } from "../collectors/public_feed.ts";
+import { resolveSourceConfiguration } from "../config/source_registry.ts";
 import { main as ingestBatch } from "./scan_adoption_deals.ts";
 
 /** Scheduled Windmill entry point for the recurring Adopt X scan. */
@@ -8,14 +9,27 @@ export async function main() {
     throw new Error("ADOPTX_FEEDS_JSON Windmill variable is required");
   }
 
-  const feeds = JSON.parse(rawFeeds) as FeedConfig[];
-  if (!Array.isArray(feeds) || feeds.length === 0) {
+  const configuration = resolveSourceConfiguration(rawFeeds);
+  if (configuration.feeds.length === 0) {
     throw new Error("ADOPTX_FEEDS_JSON must contain at least one feed");
   }
 
-  const sources = await collectFeeds(feeds);
-  return await ingestBatch(
-    [...new Set(feeds.map((feed) => feed.sourceType))],
-    sources,
+  const collection = await collectFeedsWithDiagnostics(configuration.feeds);
+  if (collection.sources.length === 0 && collection.failures.length > 0) {
+    throw new Error(`All configured feeds failed: ${JSON.stringify(collection.failures)}`);
+  }
+
+  const result = await ingestBatch(
+    [...new Set(collection.sources.map((source) => source.sourceType))],
+    collection.sources,
   );
+
+  return {
+    ...result,
+    configuredSourceKeys: configuration.feeds.map(
+      (feed) => feed.key ?? `${feed.publisher}:${feed.sourceType}`,
+    ),
+    unconfiguredSourceKeys: configuration.unconfiguredKeys,
+    feedFailures: collection.failures,
+  };
 }
