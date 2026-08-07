@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { FunctionReference } from "convex/server";
@@ -35,8 +35,16 @@ import type { ArchiveDetail, ArchiveRow, BriefPoint } from "@/lib/brief-types";
 
 export const Route = createFileRoute("/briefs")({
   head: () => ({ meta: [{ title: "Brief Archive - Adopt X" }] }),
-  component: BriefArchive,
+  component: BriefsRouteView,
 });
+
+function BriefsRouteView() {
+  const showingBriefReader = useRouterState({
+    select: (state) => state.matches.some((match) => match.routeId === "/briefs/$externalId"),
+  });
+
+  return showingBriefReader ? <Outlet /> : <BriefArchive />;
+}
 
 type ArchiveTabKey = "All Briefs" | "Approved" | "Generated" | "Draft" | "Archived";
 
