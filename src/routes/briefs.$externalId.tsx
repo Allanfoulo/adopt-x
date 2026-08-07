@@ -137,14 +137,21 @@ function BriefReader() {
             <aside className="space-y-4 p-4 sm:p-5 xl:sticky xl:top-4 xl:self-start">
               <ReaderFacts title="Transaction Overview" items={detail.transaction} />
               <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4">
-                <div className="text-[12px] font-medium text-text-primary">Source Snapshot (Top 3)</div>
-                <div className="mt-4 space-y-3">
-                  {detail.sources.slice(0, 3).map((source) => (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[12px] font-medium text-text-primary">Sources (All Cited)</div>
+                  <span className="mono text-[10px] text-text-muted">{detail.sources.length}</span>
+                </div>
+                <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                  {detail.sources.length ? detail.sources.map((source) => (
                     <a key={`${source.publisher}-${source.headline}`} href={source.url} target="_blank" rel="noreferrer" className="flex items-start gap-2 text-[10px] text-text-secondary hover:text-text-primary">
                       <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                      <span className="min-w-0 flex-1">{source.publisher}: {source.headline}</span><ExternalLink className="h-3 w-3 shrink-0 text-text-muted" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block">{source.publisher}: {source.headline}</span>
+                        <span className="mt-0.5 block text-[9px] text-text-muted">{source.date} · {source.type}</span>
+                      </span>
+                      <ExternalLink className="h-3 w-3 shrink-0 text-text-muted" />
                     </a>
-                  ))}
+                  )) : <ReaderEmpty reason="No cited source records are available for this brief." />}
                 </div>
               </div>
             </aside>
