@@ -506,6 +506,8 @@ function BriefArchiveTable({
               <tr
                 key={row.id}
                 onClick={() => onSelect(row.id)}
+                onDoubleClick={() => onOpen(row.id)}
+                title="Double-click to open brief"
                 className={`cursor-pointer border-t border-hairline-soft align-top transition-colors ${
                   active ? "bg-lime/[0.04]" : "hover:bg-surface-hover/30"
                 }`}
