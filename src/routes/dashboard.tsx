@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Activity,
   ArrowDown,
@@ -41,12 +41,7 @@ type GeoDatum = {
   color: string;
 };
 
-type QueueHealthDatum = {
-  label: string;
-  value: number;
-  delta: number;
-  color: string;
-};
+type DashboardRange = "all" | "last7";
 
 const chartColors = ["#4D9DFF", "#2DD4BF", "#F5A524", "#8B5CF6", "#6F7D88"];
 
@@ -60,123 +55,17 @@ const statusColors: Record<string, string> = {
   Approved: "#7FA8FF",
 };
 
-const fallbackSectorBars: BarDatum[] = [
-  { name: "Fintech", value: 72, color: "#4D9DFF" },
-  { name: "Healthcare", value: 48, color: "#2DD4BF" },
-  { name: "Insurance", value: 32, color: "#F5A524" },
-  { name: "Legal", value: 21, color: "#8B5CF6" },
-] as const;
-
-const fallbackRoleBars: BarDatum[] = [
-  { name: "Investment intelligence infrastructure", value: 68, color: "#4D9DFF", short: "Inv. Intel" },
-  { name: "Clinical workflow support", value: 42, color: "#2DD4BF", short: "Clinical" },
-  { name: "Claims automation", value: 28, color: "#F5A524", short: "Claims" },
-  { name: "Compliance review automation", value: 22, color: "#8B5CF6", short: "Compliance" },
-] as const;
-
-const fallbackDealTypes: BarDatum[] = [
-  { name: "Acquisition", value: 78, color: "#4D9DFF" },
-  { name: "Strategic Partnership", value: 46, color: "#2DD4BF" },
-  { name: "Strategic Investment", value: 34, color: "#F5A524" },
-  { name: "Product Launch / Off-Thesis", value: 15, color: "#8B5CF6" },
-] as const;
-
-const fallbackGeoBars: GeoDatum[] = [
-  { name: "South Africa / Australia", value: 43, pct: 32, color: "#4D9DFF" },
-  { name: "UK", value: 36, pct: 27, color: "#2DD4BF" },
-  { name: "US", value: 33, pct: 24, color: "#F5A524" },
-  { name: "Australia", value: 18, pct: 13, color: "#8B5CF6" },
-  { name: "Other", value: 8, pct: 6, color: "#6F7D88" },
-] as const;
-
-const candidatesOverTime = [30, 34, 38, 45, 48, 55, 62];
-const priorCandidates = [25, 28, 30, 32, 34, 36, 38];
-
-const briefsBars = [12, 14, 13, 16, 17, 18, 20];
-const priorBriefs = [8, 10, 11, 12, 13, 14, 16];
-const days = ["Jul 10", "Jul 11", "Jul 12", "Jul 13", "Jul 14", "Jul 15", "Jul 16"];
-
-const fallbackQueueHealth: QueueHealthDatum[] = [
-  { label: "Pending Review", value: 14, delta: 2, color: "#F5A524" },
-  { label: "Brief Queued", value: 6, delta: 0, color: "#4D9DFF" },
-  { label: "Brief Ready", value: 5, delta: 1, color: "#8EEA45" },
-  { label: "Brief Failed", value: 2, delta: -1, color: "#FF4D45" },
-  { label: "Rejected", value: 2, delta: 0, color: "#6F7D88" },
-] as const;
-
-const operationalScanRuns = [
-  { id: "scan_002", status: "Completed", when: "Today, 08:32 AM" },
-  { id: "scan_001", status: "Completed", when: "Yesterday, 08:15 AM" },
-  { id: "scan_003", status: "Running", when: "Started 09:01 AM" },
-  { id: "scan_000", status: "Failed", when: "Jul 13, 04:26 PM" },
-] as const;
-
-const operationalBriefRuns = [
-  { id: "brief_001", status: "Completed", when: "Today, 08:45 AM" },
-  { id: "brief_002", status: "Queued", when: "Today, 08:46 AM" },
-  { id: "brief_003", status: "Running", when: "Started 09:02 AM" },
-  { id: "brief_000", status: "Failed", when: "Jul 13, 04:50 PM" },
-] as const;
-
-const queueAging = [
-  { label: "0-24h", value: 12, pct: 46, color: "#8EEA45" },
-  { label: "24-72h", value: 9, pct: 34, color: "#F5A524" },
-  { label: "72h+", value: 5, pct: 19, color: "#FF4D45" },
-] as const;
-
-const auditEvents = [
-  {
-    who: "JS",
-    action: "Edited AI Role",
-    target: "Purple Group / Telescope AI / Fintech",
-    when: "Today, 09:42 AM",
-  },
-  {
-    who: "MP",
-    action: "Approved Candidate",
-    target: "HealthBridge / CareScribe AI",
-    when: "Today, 09:13 AM",
-  },
-  {
-    who: "JS",
-    action: "Replaced Off-Thesis",
-    target: "Payflow Systems / Vector Marketing",
-    when: "Jul 13, 06:51 PM",
-  },
-] as const;
-
 function buildDashboardView(insights: DashboardInsights | undefined) {
   if (!insights) {
     return {
-      kpis: {
-        totalCandidates: "127",
-        approvedBriefs: "24",
-        pendingReview: "14",
-        briefReady: "5",
-        averageSourceConfidence: "78",
-        averageThesisFit: "83",
-      },
-      sectorBars: fallbackSectorBars,
-      roleBars: fallbackRoleBars,
-      dealTypes: fallbackDealTypes,
-      dealTypeTotal: 173,
-      geoBars: fallbackGeoBars,
-      candidatesOverTime,
-      priorCandidates,
-      candidateTrendLabels: days,
-      briefsBars,
-      priorBriefs,
-      briefTrendLabels: days,
-      insights: [
-        "Fintech acquisitions show the highest thesis-fit (avg. 88), outperforming other sectors. Review high-scoring fintech acquisitions in the queue.",
-        "Healthcare partnerships have the lowest source confidence (avg. 72) and highest manual review rate. Allocate more analyst time for healthcare.",
-        "Insurance has the fastest brief turnaround (avg. 18h from scan to brief ready). Leverage this benchmark to improve other sectors.",
-      ],
-      queueHealth: fallbackQueueHealth,
-      operationalScanRuns,
-      operationalBriefRuns,
-      queueAging,
-      auditEvents,
+      isLoading: true,
+      kpis: { totalCandidates: "-", approvedBriefs: "-", pendingReview: "-", briefReady: "-", averageSourceConfidence: "-", averageThesisFit: "-", deltas: { totalCandidates: null, approvedBriefs: null, pendingReview: null, briefReady: null, averageSourceConfidence: null, averageThesisFit: null } },
+      sectorBars: [], roleBars: [], dealTypes: [], dealTypeTotal: 0, geoBars: [],
+      candidatesOverTime: [], priorCandidates: [], candidateTrendLabels: [],
+      briefsBars: [], priorBriefs: [], briefTrendLabels: [], insights: [], queueHealth: [],
+      operationalScanRuns: [], operationalBriefRuns: [], queueAging: [], auditEvents: [],
+      periodLabel: "Loading",
+      forwardRate: null,
     };
   }
 
@@ -192,10 +81,11 @@ function buildDashboardView(insights: DashboardInsights | undefined) {
     pct: item.percentage,
     color: chartColors[index % chartColors.length],
   }));
-  const candidateTrend = normalizeTrend(insights.trends.candidates, candidatesOverTime);
-  const briefTrend = normalizeTrend(insights.trends.approvedBriefs, briefsBars);
+  const candidateTrend = normalizeTrend(insights.trends.candidates, insights.trends.previousCandidates);
+  const briefTrend = normalizeTrend(insights.trends.approvedBriefs, insights.trends.previousApprovedBriefs);
 
   return {
+    isLoading: false,
     kpis: {
       totalCandidates: String(insights.kpis.totalCandidates),
       approvedBriefs: String(insights.kpis.approvedBriefs),
@@ -203,6 +93,7 @@ function buildDashboardView(insights: DashboardInsights | undefined) {
       briefReady: String(insights.kpis.briefReady),
       averageSourceConfidence: String(insights.kpis.averageSourceConfidence),
       averageThesisFit: String(insights.kpis.averageThesisFit),
+      deltas: insights.kpis.deltas,
     },
     sectorBars,
     roleBars,
@@ -218,7 +109,7 @@ function buildDashboardView(insights: DashboardInsights | undefined) {
     briefsBars: briefTrend.values,
     priorBriefs: briefTrend.prior,
     briefTrendLabels: briefTrend.labels,
-    insights: insights.insights.length > 0 ? insights.insights : ["Seeded Convex data is ready for review."],
+    insights: insights.insights,
     queueHealth: insights.queueHealth
       .filter((item) => item.label !== "Approved")
       .map((item) => ({
@@ -248,7 +139,18 @@ function buildDashboardView(insights: DashboardInsights | undefined) {
       target: event.target,
       when: event.when,
     })),
+    periodLabel: "Selected period",
+    forwardRate: candidatesForwardRate(insights.queueHealth),
   };
+}
+
+function candidatesForwardRate(queueHealth: readonly { label: string; value: number }[]) {
+  const total = queueHealth.reduce((sum, item) => sum + item.value, 0);
+  if (!total) return 0;
+  const moved = queueHealth
+    .filter((item) => ["Approved", "Brief Ready", "Brief Queued"].includes(item.label))
+    .reduce((sum, item) => sum + item.value, 0);
+  return Math.round((moved / total) * 100);
 }
 
 function toBars(rows: readonly { label: string; value: number }[]): BarDatum[] {
@@ -256,27 +158,22 @@ function toBars(rows: readonly { label: string; value: number }[]): BarDatum[] {
     name: item.label,
     value: item.value,
     color: chartColors[index % chartColors.length],
+    short: abbreviate(item.label),
   }));
 }
 
 function normalizeTrend(
   rows: readonly { label: string; value: number }[],
-  fallbackValues: number[],
+  priorRows: readonly { label: string; value: number }[],
 ) {
-  if (rows.length === 0) {
-    return {
-      values: fallbackValues,
-      prior: fallbackValues.map((value) => Math.max(1, Math.round(value * 0.75))),
-      labels: days,
-    };
-  }
-
-  const paddedRows = rows.length >= 2 ? rows : [...rows, { label: "Next", value: rows[0]?.value ?? 0 }];
-  const values = paddedRows.map((item) => item.value);
+  const labels = [...new Set([...rows.map((item) => item.label), ...priorRows.map((item) => item.label)])];
+  const currentByLabel = new Map(rows.map((item) => [item.label, item.value]));
+  const priorByLabel = new Map(priorRows.map((item) => [item.label, item.value]));
+  const values = labels.map((label) => currentByLabel.get(label) ?? 0);
   return {
     values,
-    prior: values.map((value) => Math.max(0, Math.round(value * 0.75))),
-    labels: paddedRows.map((item) => item.label),
+    prior: labels.map((label) => priorByLabel.get(label) ?? 0),
+    labels,
   };
 }
 
@@ -292,26 +189,27 @@ function abbreviate(value: string) {
 }
 
 function Dashboard() {
-  const insights = useQuery(api.dashboard.getInsights, {});
-  const view = buildDashboardView(insights);
+  const [range, setRange] = useState<DashboardRange>("all");
+  const insights = useQuery(api.dashboard.getInsights, getDashboardRangeArgs(range));
+  const view = { ...buildDashboardView(insights), periodLabel: formatRangeLabel(range) };
 
   return (
     <AppShell
       title="Dashboard"
       subtitle="Adoption patterns and pipeline insights across regulated sectors"
-      actions={<DashboardHeaderActions />}
+      actions={<DashboardHeaderActions range={range} onRangeChange={setRange} />}
     >
       <div className="space-y-5">
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <KPI icon={Users} label="Total Candidates" value={view.kpis.totalCandidates} delta={19} tone="info" />
-          <KPI icon={CheckCircle2} label="Approved Briefs" value={view.kpis.approvedBriefs} delta={26} tone="success" />
-          <KPI icon={Clock} label="Pending Review" value={view.kpis.pendingReview} delta={-7} tone="warning" />
-          <KPI icon={Target} label="Brief Ready" value={view.kpis.briefReady} delta={25} tone="info" />
+          <KPI icon={Users} label="Total Candidates" value={view.kpis.totalCandidates} delta={view.kpis.deltas.totalCandidates} tone="info" />
+          <KPI icon={CheckCircle2} label="Approved Briefs" value={view.kpis.approvedBriefs} delta={view.kpis.deltas.approvedBriefs} tone="success" />
+          <KPI icon={Clock} label="Pending Review" value={view.kpis.pendingReview} delta={view.kpis.deltas.pendingReview} tone="warning" />
+          <KPI icon={Target} label="Brief Ready" value={view.kpis.briefReady} delta={view.kpis.deltas.briefReady} tone="info" />
           <KPI
             icon={ShieldCheck}
             label="Avg. Source Conf."
             value={view.kpis.averageSourceConfidence}
-            delta={6}
+            delta={view.kpis.deltas.averageSourceConfidence}
             tone="info"
             unit="pts"
           />
@@ -319,7 +217,7 @@ function Dashboard() {
             icon={Target}
             label="Avg. Thesis-Fit"
             value={view.kpis.averageThesisFit}
-            delta={4}
+            delta={view.kpis.deltas.averageThesisFit}
             tone="success"
             unit="pts"
           />
@@ -330,21 +228,24 @@ function Dashboard() {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
               <ChartPanel
                 title="Adoption by Sector"
-                footer={`${view.sectorBars[0]?.name ?? "Tracked sectors"} leads current adoption volume.`}
+                periodLabel={view.periodLabel}
+                footer={view.sectorBars[0] ? `${view.sectorBars[0].name} leads adoption volume in this period.` : "No sector data in this period."}
               >
-                <BarChart data={view.sectorBars} labels={view.sectorBars.map((item) => item.name)} />
+                <BarChart data={view.sectorBars} labels={view.sectorBars.map((item) => item.short ?? item.name)} />
               </ChartPanel>
 
               <ChartPanel
                 title="Counts by Deal Type"
-                footer="Acquisitions represent nearly half of all adoption events."
+                periodLabel={view.periodLabel}
+                footer={view.dealTypes[0] ? `${view.dealTypes[0].name} is the most common deal type in this period.` : "No deal type data in this period."}
               >
                 <DonutLegend data={view.dealTypes} total={view.dealTypeTotal} />
               </ChartPanel>
 
               <ChartPanel
                 title="Geography Breakdown"
-                footer="Activity concentrated in SA/AU, UK, and US markets."
+                periodLabel={view.periodLabel}
+                footer={view.geoBars[0] ? `${view.geoBars[0].name} is the leading geography in this period.` : "No geography data in this period."}
               >
                 <HBarChart data={view.geoBars} />
               </ChartPanel>
@@ -353,16 +254,18 @@ function Dashboard() {
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
               <ChartPanel
                 title="AI Role Distribution"
-                footer="Investment intelligence and clinical workflow lead AI role adoption."
+                periodLabel={view.periodLabel}
+                footer={view.roleBars[0] ? `${view.roleBars[0].name} leads AI-role adoption in this period.` : "No AI role data in this period."}
               >
                 <BarChart data={view.roleBars} labels={view.roleBars.map((item) => item.short ?? item.name)} />
               </ChartPanel>
 
               <ChartPanel
                 title="Candidates Over Time"
+                periodLabel={view.periodLabel}
                 footer={
                   <span>
-                    <span className="mono text-lime">+19%</span> more candidates vs prior 7 days.
+                    <span className="mono text-lime">{formatDelta(view.kpis.deltas.totalCandidates)}</span> candidates vs prior period.
                   </span>
                 }
                 legend={
@@ -384,10 +287,10 @@ function Dashboard() {
 
               <ChartPanel
                 title="Approved Briefs Over Time"
+                periodLabel={view.periodLabel}
                 footer={
                   <span>
-                    <span className="mono text-lime">+26%</span> more approved briefs vs prior
-                    7 days.
+                    <span className="mono text-lime">{formatDelta(view.kpis.deltas.approvedBriefs)}</span> approved briefs vs prior period.
                   </span>
                 }
                 legend={
@@ -455,8 +358,7 @@ function Dashboard() {
                     ))}
                   </div>
                   <div className="mt-4 text-[11px] text-text-secondary">
-                    Queue remains healthy. <span className="mono text-lime">71%</span> of items
-                    moved forward in the last 7 days.
+                    {view.forwardRate === null ? "Loading live queue health..." : <><span className="mono text-lime">{view.forwardRate}%</span> of items moved forward in the selected period.</>}
                   </div>
                 </div>
               </Panel>
@@ -493,7 +395,7 @@ function Dashboard() {
             <Panel>
               <PanelHeader
                 title="Queue Aging"
-                action={<span className="mono text-[10.5px]">As of now</span>}
+                action={<span className="mono text-[10.5px]">{view.periodLabel}</span>}
               />
               <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
                 {view.queueAging.map((item) => (
@@ -513,21 +415,13 @@ function Dashboard() {
                     </div>
                   </div>
                 ))}
-                <div className="flex flex-col gap-2 pt-2 text-[10.5px] sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-text-muted">
-                    Oldest item: <span className="mono text-danger">3d 6h</span>
-                  </span>
-                  <button type="button" className="text-left text-text-secondary hover:text-lime">
-                    Review oldest
-                  </button>
-                </div>
               </div>
             </Panel>
 
             <Panel>
               <PanelHeader
                 title="Audit & Review Activity"
-                action={<span className="mono text-[10.5px]">All Time</span>}
+                action={<span className="mono text-[10.5px]">{view.periodLabel}</span>}
               />
               <div className="space-y-3 px-4 pb-4 sm:px-5 sm:pb-5">
                 {view.auditEvents.map((event) => (
@@ -551,6 +445,7 @@ function Dashboard() {
                     </div>
                   </div>
                 ))}
+                {view.auditEvents.length === 0 ? <div className="text-[11px] text-text-muted">No audit activity in this period.</div> : null}
                 <button type="button" className="text-[10.5px] text-text-secondary hover:text-lime">
                   View full audit log
                 </button>
@@ -563,12 +458,43 @@ function Dashboard() {
   );
 }
 
-function DashboardHeaderActions() {
+function getDashboardRangeArgs(range: DashboardRange) {
+  if (range === "all") return {};
+  const endAt = Date.now() + 1;
+  const startAt = endAt - 7 * 24 * 60 * 60 * 1000;
+  return {
+    startAt,
+    endAt,
+    compareStartAt: startAt - 7 * 24 * 60 * 60 * 1000,
+    compareEndAt: startAt,
+  };
+}
+
+function formatRangeLabel(range: DashboardRange) {
+  if (range === "all") return "All Time";
+  return "Last 7 Days";
+}
+
+function formatDelta(value: number | null) {
+  return value === null ? "No comparison" : `${value > 0 ? "+" : ""}${value}%`;
+}
+
+function DashboardHeaderActions({
+  range,
+  onRangeChange,
+}: {
+  range: DashboardRange;
+  onRangeChange: (range: DashboardRange) => void;
+}) {
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto lg:gap-3">
-      <ToolbarButton icon={Calendar}>Jul 10 - Jul 16, 2025</ToolbarButton>
+      <ToolbarButton icon={Calendar} onClick={() => onRangeChange(range === "all" ? "last7" : "all")}>
+        {formatRangeLabel(range)}
+      </ToolbarButton>
       <span className="hidden text-[11px] text-text-muted sm:inline">vs</span>
-      <ToolbarButton icon={Calendar}>Jul 3 - Jul 9, 2025</ToolbarButton>
+      <ToolbarButton icon={Calendar} onClick={() => onRangeChange("all")}>
+        {range === "last7" ? "Previous 7 Days" : "Comparison unavailable"}
+      </ToolbarButton>
       <ToolbarButton>Filters</ToolbarButton>
       <button
         type="button"
@@ -597,12 +523,12 @@ function KPI({
   icon: typeof Users;
   label: string;
   value: string;
-  delta: number;
+  delta: number | null;
   tone: "success" | "warning" | "info";
   unit?: string;
 }) {
   const color = tone === "success" ? "#8EEA45" : tone === "warning" ? "#F5A524" : "#4D9DFF";
-  const positive = delta > 0;
+  const positive = (delta ?? 0) > 0;
 
   return (
     <div className="panel min-h-[112px] px-4 py-3">
@@ -619,14 +545,14 @@ function KPI({
         {value}
         {unit ? <span className="ml-1 text-[12px] text-text-muted">{unit}</span> : null}
       </div>
-      <div
+      {delta === null ? <div className="mono mt-2 text-[10px] text-text-muted">No comparison period</div> : <div
         className="mono mt-2 inline-flex flex-wrap items-center gap-0.5 text-[10px]"
         style={{ color: positive ? "#8EEA45" : "#FF4D45" }}
       >
         {positive ? <ArrowUp className="h-2.5 w-2.5" /> : <ArrowDown className="h-2.5 w-2.5" />}
         {Math.abs(delta)}%
-        <span className="ml-1 text-text-muted">vs prior 7 days</span>
-      </div>
+        <span className="ml-1 text-text-muted">vs prior period</span>
+      </div>}
     </div>
   );
 }
@@ -636,14 +562,16 @@ function ChartPanel({
   children,
   footer,
   legend,
+  periodLabel,
 }: {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
   legend?: ReactNode;
+  periodLabel: string;
 }) {
   return (
-    <Panel>
+    <Panel className="min-w-0 overflow-hidden">
       <div className="flex flex-col gap-2 border-b border-hairline-soft px-4 py-4 sm:px-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="text-[12.5px] font-semibold">{title}</div>
@@ -653,7 +581,7 @@ function ChartPanel({
           type="button"
           className="inline-flex items-center gap-1 self-start text-[10.5px] mono text-text-secondary"
         >
-          All Time
+          {periodLabel}
           <ChevronDown className="h-3 w-3" />
         </button>
       </div>
@@ -690,6 +618,10 @@ function Legend({
   );
 }
 
+function ChartEmpty() {
+  return <div className="flex h-[170px] items-center justify-center rounded-md border border-dashed border-hairline-soft px-4 text-center text-[11px] text-text-muted">No live data in this period.</div>;
+}
+
 function BarChart({
   data,
   labels,
@@ -697,15 +629,17 @@ function BarChart({
   data: readonly { value: number; color: string }[];
   labels: readonly string[];
 }) {
-  const max = Math.max(...data.map((item) => item.value));
+  if (data.length === 0) return <ChartEmpty />;
+  const max = Math.max(1, ...data.map((item) => item.value));
 
   return (
-    <div className="flex h-[170px] items-end gap-2 px-1 sm:gap-3 sm:px-2">
+    <div className="-mx-1 overflow-x-auto px-1">
+      <div className="flex h-[170px] min-w-[320px] items-end gap-2 px-1 sm:gap-3 sm:px-2">
       {data.map((item, index) => {
         const height = (item.value / max) * 100;
 
         return (
-          <div key={labels[index]} className="flex flex-1 flex-col items-center gap-2">
+          <div key={labels[index]} className="flex min-w-[44px] flex-1 flex-col items-center gap-2">
             <div className="mono text-[10px] font-semibold sm:text-[10.5px]">{item.value}</div>
             <div
               className="relative w-full overflow-hidden rounded-t-md"
@@ -716,12 +650,13 @@ function BarChart({
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15)",
               }}
             />
-            <div className="text-center text-[9px] leading-tight text-text-muted sm:text-[10px]">
+            <div className="max-w-[78px] break-words text-center text-[9px] leading-tight text-text-muted sm:text-[10px]">
               {labels[index]}
             </div>
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -733,6 +668,7 @@ function DonutLegend({
   data: readonly { name: string; value: number; color: string }[];
   total: number;
 }) {
+  if (data.length === 0) return <ChartEmpty />;
   const radius = 46;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
@@ -802,13 +738,14 @@ function HBarChart({
 }: {
   data: readonly { name: string; value: number; pct: number; color: string }[];
 }) {
-  const max = Math.max(...data.map((item) => item.value));
+  if (data.length === 0) return <ChartEmpty />;
+  const max = Math.max(1, ...data.map((item) => item.value));
 
   return (
     <div className="flex h-[170px] flex-col justify-center space-y-2">
       {data.map((item) => (
         <div key={item.name} className="flex items-center gap-2 text-[10.5px] sm:gap-3">
-          <div className="w-20 truncate text-text-secondary sm:w-28">{item.name}</div>
+          <div className="w-24 break-words leading-tight text-text-secondary sm:w-32">{item.name}</div>
           <div className="relative h-3.5 flex-1 overflow-hidden rounded bg-white/5">
             <div
               className="h-full rounded"
@@ -838,15 +775,18 @@ function LineChart({
   labels: string[];
   color: string;
 }) {
+  if (current.length === 0) return <ChartEmpty />;
   const width = 260;
   const height = 130;
   const padding = 12;
   const allValues = [...current, ...prior];
-  const max = Math.max(...allValues) * 1.1;
-  const min = Math.min(...allValues) * 0.7;
-  const scaleX = (index: number) => padding + (index * (width - 2 * padding)) / (current.length - 1);
+  const max = Math.max(1, ...allValues) * 1.1;
+  const min = Math.min(0, ...allValues) * 0.7;
+  const valueRange = Math.max(1, max - min);
+  const xSteps = Math.max(1, current.length - 1);
+  const scaleX = (index: number) => padding + (index * (width - 2 * padding)) / xSteps;
   const scaleY = (value: number) =>
-    height - padding - ((value - min) / (max - min)) * (height - 2 * padding);
+    height - padding - ((value - min) / valueRange) * (height - 2 * padding);
   const makePath = (values: number[]) =>
     values
       .map((value, index) => `${index === 0 ? "M" : "L"} ${scaleX(index)} ${scaleY(value)}`)
@@ -869,7 +809,10 @@ function LineChart({
             <circle key={labels[index]} cx={scaleX(index)} cy={scaleY(value)} r="2.5" fill={color} />
           ))}
         </svg>
-        <div className="mt-1 grid grid-cols-7 text-[9.5px] mono text-text-muted">
+        <div
+          className="mt-1 grid text-[9.5px] mono text-text-muted"
+          style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}
+        >
           {labels.map((label, index) => (
             <span
               key={label}
@@ -895,7 +838,8 @@ function BarComparison({
   labels: string[];
   color: string;
 }) {
-  const max = Math.max(...current, ...prior) * 1.1;
+  if (current.length === 0) return <ChartEmpty />;
+  const max = Math.max(1, ...current, ...prior) * 1.1;
 
   return (
     <div className="-mx-1 overflow-x-auto px-1">
@@ -922,7 +866,10 @@ function BarComparison({
             </div>
           ))}
         </div>
-        <div className="mt-1 grid grid-cols-7 text-[9.5px] mono text-text-muted">
+        <div
+          className="mt-1 grid text-[9.5px] mono text-text-muted"
+          style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}
+        >
           {labels.map((label, index) => (
             <span
               key={label}

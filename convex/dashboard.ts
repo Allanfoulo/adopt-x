@@ -1,5 +1,5 @@
-import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import {
   average,
@@ -13,6 +13,10 @@ import {
 export const getInsights = query({
   args: {
     limit: v.optional(v.number()),
+    startAt: v.optional(v.number()),
+    endAt: v.optional(v.number()),
+    compareStartAt: v.optional(v.number()),
+    compareEndAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const workspaceId = await getDemoWorkspaceId(ctx);
@@ -21,16 +25,20 @@ export const getInsights = query({
     }
 
     const limit = Math.min(args.limit ?? 100, 200);
-    const candidates = await ctx.db
+    const allCandidates = await ctx.db
       .query("dealCandidates")
       .withIndex("by_workspaceId_and_updatedAt", (q) => q.eq("workspaceId", workspaceId))
       .order("desc")
       .take(limit);
-    const briefs = await ctx.db
+    const allBriefs = await ctx.db
       .query("dealBriefs")
       .withIndex("by_workspaceId_and_updatedAt", (q) => q.eq("workspaceId", workspaceId))
       .order("desc")
       .take(limit);
+    const candidates = allCandidates.filter((candidate) => inRange(candidate.announcementDate, args.startAt, args.endAt));
+    const previousCandidates = allCandidates.filter((candidate) => inRange(candidate.announcementDate, args.compareStartAt, args.compareEndAt));
+    const briefs = allBriefs.filter((brief) => inRange(brief.approvedAt ?? brief.updatedAt, args.startAt, args.endAt));
+    const previousBriefs = allBriefs.filter((brief) => inRange(brief.approvedAt ?? brief.updatedAt, args.compareStartAt, args.compareEndAt));
     const scanRuns = await ctx.db
       .query("scanRuns")
       .withIndex("by_workspaceId_and_startedAt", (q) => q.eq("workspaceId", workspaceId))
@@ -55,6 +63,29 @@ export const getInsights = query({
         briefReady: candidates.filter((candidate) => candidate.status === "brief_ready").length,
         averageSourceConfidence: average(candidates.map((candidate) => candidate.sourceConfidence)),
         averageThesisFit: average(candidates.map((candidate) => candidate.thesisFitScore)),
+        deltas: {
+          totalCandidates: percentageDelta(candidates.length, previousCandidates.length),
+          approvedBriefs: percentageDelta(
+            briefs.filter((brief) => brief.status === "approved").length,
+            previousBriefs.filter((brief) => brief.status === "approved").length,
+          ),
+          pendingReview: percentageDelta(
+            candidates.filter((candidate) => candidate.status === "pending_review").length,
+            previousCandidates.filter((candidate) => candidate.status === "pending_review").length,
+          ),
+          briefReady: percentageDelta(
+            candidates.filter((candidate) => candidate.status === "brief_ready").length,
+            previousCandidates.filter((candidate) => candidate.status === "brief_ready").length,
+          ),
+          averageSourceConfidence: percentageDelta(
+            average(candidates.map((candidate) => candidate.sourceConfidence)),
+            average(previousCandidates.map((candidate) => candidate.sourceConfidence)),
+          ),
+          averageThesisFit: percentageDelta(
+            average(candidates.map((candidate) => candidate.thesisFitScore)),
+            average(previousCandidates.map((candidate) => candidate.thesisFitScore)),
+          ),
+        },
       },
       distributions: {
         sectors: distribution(candidates, (candidate) => titleCase(candidate.sector)),
@@ -64,8 +95,13 @@ export const getInsights = query({
       },
       trends: {
         candidates: trend(candidates, (candidate) => candidate.announcementDate),
+        previousCandidates: trend(previousCandidates, (candidate) => candidate.announcementDate),
         approvedBriefs: trend(
           briefs.filter((brief) => brief.status === "approved"),
+          (brief) => brief.approvedAt ?? brief.updatedAt,
+        ),
+        previousApprovedBriefs: trend(
+          previousBriefs.filter((brief) => brief.status === "approved"),
           (brief) => brief.approvedAt ?? brief.updatedAt,
         ),
       },
@@ -102,6 +138,14 @@ function emptyInsights() {
       briefReady: 0,
       averageSourceConfidence: 0,
       averageThesisFit: 0,
+      deltas: {
+        totalCandidates: null,
+        approvedBriefs: null,
+        pendingReview: null,
+        briefReady: null,
+        averageSourceConfidence: null,
+        averageThesisFit: null,
+      },
     },
     distributions: {
       sectors: [],
@@ -111,7 +155,9 @@ function emptyInsights() {
     },
     trends: {
       candidates: [],
+      previousCandidates: [],
       approvedBriefs: [],
+      previousApprovedBriefs: [],
     },
     queueHealth: [],
     queueAging: [],
@@ -122,6 +168,15 @@ function emptyInsights() {
     auditEvents: [],
     insights: [],
   };
+}
+
+function inRange(timestamp: number, startAt?: number, endAt?: number) {
+  return (startAt === undefined || timestamp >= startAt) && (endAt === undefined || timestamp < endAt);
+}
+
+function percentageDelta(current: number, previous: number) {
+  if (previous === 0) return current === 0 ? 0 : null;
+  return Math.round(((current - previous) / previous) * 100);
 }
 
 function distribution(
