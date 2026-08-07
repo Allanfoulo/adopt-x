@@ -288,7 +288,7 @@ export default defineSchema({
       capabilityPurchased: v.array(v.string()),
       buildVsBuy: v.string(),
       marketChange: v.string(),
-      valueDrivers: v.array(v.string()),
+      valueDrivers: v.array(v.union(v.string(), v.object({ title: v.string(), detail: v.string() }))),
       strategicRationalePoints: v.array(v.object({ title: v.string(), detail: v.string() })),
       synergyMap: v.array(v.object({ category: v.string(), items: v.array(v.string()) })),
       riskAnalysis: v.array(v.object({ category: v.string(), title: v.string(), detail: v.string(), mitigation: v.string() })),

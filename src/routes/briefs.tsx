@@ -813,7 +813,7 @@ function BriefWorkspaceSummaryPane({
         : activeSection === "Strategic Rationale"
           ? (analysis?.strategicRationalePoints ?? []).map((item) => item)
           : activeSection === "Value Drivers"
-            ? (analysis?.valueDrivers ?? []).map((item) => ({ title: "Value driver", detail: item }))
+            ? (analysis?.valueDrivers ?? []).map((item) => typeof item === "string" ? ({ title: "Value driver", detail: item }) : item)
             : activeSection === "Synergy Map"
               ? (analysis?.synergyMap ?? []).map((item) => ({ title: item.category, detail: item.items.join("; ") }))
               : activeSection === "Risks & Mitigations"

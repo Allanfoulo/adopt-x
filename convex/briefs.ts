@@ -15,7 +15,7 @@ const analysisValidator = v.object({
   capabilityPurchased: v.array(v.string()),
   buildVsBuy: v.string(),
   marketChange: v.string(),
-  valueDrivers: v.array(v.string()),
+  valueDrivers: v.array(v.union(v.string(), analysisPointValidator)),
   strategicRationalePoints: v.array(analysisPointValidator),
   synergyMap: v.array(v.object({ category: v.string(), items: v.array(v.string()) })),
   riskAnalysis: v.array(v.object({ category: v.string(), title: v.string(), detail: v.string(), mitigation: v.string() })),
@@ -503,7 +503,7 @@ type BriefAnalysis = {
   capabilityPurchased: string[];
   buildVsBuy: string;
   marketChange: string;
-  valueDrivers: string[];
+  valueDrivers: (string | { title: string; detail: string })[];
   strategicRationalePoints: { title: string; detail: string }[];
   synergyMap: { category: string; items: string[] }[];
   riskAnalysis: { category: string; title: string; detail: string; mitigation: string }[];

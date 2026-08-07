@@ -20,7 +20,7 @@ export type BriefAnalysis = {
   capabilityPurchased: string[];
   buildVsBuy: string;
   marketChange: string;
-  valueDrivers: string[];
+  valueDrivers: (string | BriefPoint)[];
   strategicRationalePoints: BriefPoint[];
   synergyMap: { category: string; items: string[] }[];
   riskAnalysis: { category: string; title: string; detail: string; mitigation: string }[];

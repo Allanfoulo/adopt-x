@@ -105,7 +105,7 @@ function buildPrompt(input: z.infer<typeof requestSchema>): string {
         capabilityPurchased: ["capability, not a feature"],
         buildVsBuy: "why buying was preferred to internal development",
         marketChange: "market change forcing the transaction",
-        valueDrivers: ["technology, customers, talent, distribution, data, or regulation"],
+        valueDrivers: [{ title: "technology, customers, talent, distribution, data, or regulation", detail: "evidence-backed reason this driver creates value in this specific case" }],
         strategicRationalePoints: [{ title: "reason", detail: "evidence-backed explanation" }],
         synergyMap: [{ category: "Revenue | Cost | Strategic", items: ["specific synergy"] }],
         riskAnalysis: [{ category: "Integration", title: "risk", detail: "impact", mitigation: "mitigation" }],

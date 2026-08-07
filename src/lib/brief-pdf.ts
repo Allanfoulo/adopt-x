@@ -62,7 +62,10 @@ export async function buildBriefPdf(detail: ArchiveDetail, selectedBrief: Archiv
     addLines(detail.brief.strategicRationale, regular, 10.5);
     analysis.strategicRationalePoints.forEach((item) => { addSubheading(item.title); addLines(item.detail, regular, 9.5); });
     addHeading("Value Drivers");
-    analysis.valueDrivers.forEach(addBullet);
+    analysis.valueDrivers.forEach((item) => {
+      if (typeof item === "string") addBullet(item);
+      else { addSubheading(item.title); addLines(item.detail, regular, 9.5); }
+    });
     addHeading("Synergy Map");
     analysis.synergyMap.forEach((item) => { addSubheading(item.category); item.items.forEach(addBullet); });
     addHeading("Risk Analysis");

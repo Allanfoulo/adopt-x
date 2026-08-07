@@ -18,7 +18,7 @@ export const briefEnrichmentSchema = z.object({
     capabilityPurchased: z.array(z.string().min(1)).min(1),
     buildVsBuy: z.string().min(1),
     marketChange: z.string().min(1),
-    valueDrivers: z.array(z.string().min(1)).min(1),
+    valueDrivers: z.array(pointSchema).min(1),
     strategicRationalePoints: z.array(pointSchema).min(2),
     synergyMap: z.array(z.object({
       category: z.enum(["Revenue", "Cost", "Strategic"]),
