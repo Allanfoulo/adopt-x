@@ -219,9 +219,27 @@ function ReaderSourceList({ detail }: { detail: ArchiveDetail }) {
         </a>
       )) : null}
       {detail.brief.evidenceUsed.length ? (
-        <div className="rounded-lg border border-hairline-soft bg-surface-2/25 p-3">
-          <div className="text-[11px] font-medium text-text-primary">Evidence notes used in the analysis</div>
-          <ReaderBullets items={detail.brief.evidenceUsed} />
+        <div>
+          <div className="mb-3 text-[11px] font-medium text-text-primary">Evidence notes used in the analysis</div>
+          <div className="space-y-3">
+            {detail.brief.evidenceUsed.map((note, index) => {
+              const source = detail.sources.find((item) => note.includes(item.url) || note.includes(item.headline));
+              const href = source?.url ?? (/^https?:\/\//i.test(note.trim()) ? note.trim() : null);
+              const content = (
+                <div className="flex items-start gap-2">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-text-primary">{source?.headline ?? "Cited evidence note"}</div>
+                    {source ? <div className="mt-1 text-[10px] text-text-secondary">{source.publisher} · {source.date} · {source.type}</div> : null}
+                    <div className={`mt-2 break-all text-[10px] leading-5 ${href ? "text-lime/80" : "text-text-secondary"}`}>{note}</div>
+                  </div>
+                  {href ? <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" /> : null}
+                </div>
+              );
+
+              return href ? <a key={`${note}-${index}`} href={href} target="_blank" rel="noreferrer" className="block rounded-lg border border-hairline-soft bg-surface-2/35 p-3 transition-colors hover:border-lime/35 hover:bg-surface-hover">{content}</a> : <div key={`${note}-${index}`} className="rounded-lg border border-hairline-soft bg-surface-2/35 p-3">{content}</div>;
+            })}
+          </div>
         </div>
       ) : null}
     </div>
