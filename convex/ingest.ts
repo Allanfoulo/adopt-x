@@ -15,6 +15,21 @@ const sourceInput = v.object({
   publishedAt: v.number(),
   rawExcerpt: v.string(),
   hash: v.string(),
+  quarantineReason: v.optional(v.string()),
+  candidateDraft: v.optional(
+    v.object({
+      company: v.string(),
+      target: v.string(),
+      dealType: v.string(),
+      sector: v.string(),
+      geography: v.string(),
+      aiRole: v.string(),
+      confidenceScore: v.number(),
+      thesisFitScore: v.number(),
+      sourceConfidence: v.number(),
+      reasoningSummary: v.string(),
+    }),
+  ),
 });
 
 type SourceInput = {
@@ -28,6 +43,19 @@ type SourceInput = {
   publishedAt: number;
   rawExcerpt: string;
   hash: string;
+  quarantineReason?: string;
+  candidateDraft?: {
+    company: string;
+    target: string;
+    dealType: string;
+    sector: string;
+    geography: string;
+    aiRole: string;
+    confidenceScore: number;
+    thesisFitScore: number;
+    sourceConfidence: number;
+    reasoningSummary: string;
+  };
 };
 
 /**
@@ -62,6 +90,7 @@ export const ingestSourceBatch = mutation({
     let inserted = 0;
     let duplicates = 0;
     let candidatesCreated = 0;
+    let quarantined = 0;
 
     for (const source of args.sources) {
       const existingByExternalId = await ctx.db
@@ -95,20 +124,27 @@ export const ingestSourceBatch = mutation({
         publishedAt: source.publishedAt,
         rawExcerpt: source.rawExcerpt,
         hash: source.hash,
+        quarantineReason: source.quarantineReason,
         createdAt: now,
       });
       inserted += 1;
+      if (source.quarantineReason) quarantined += 1;
       candidatesCreated += await materializeSource(ctx, workspace._id, sourceHitId, source, now);
     }
 
     await ctx.db.patch(runId, {
-      status: "completed",
+      status: quarantined > 0 ? "partial_failed" : "completed",
       hitCount: inserted,
       candidateCount: candidatesCreated,
+      errorCount: quarantined,
+      error:
+        quarantined > 0
+          ? `${quarantined} source item(s) quarantined after adoption-agent analysis.`
+          : undefined,
       completedAt: Date.now(),
     });
 
-    return { runId, inserted, duplicates, candidatesCreated };
+    return { runId, inserted, duplicates, candidatesCreated, quarantined };
   },
 });
 
@@ -127,13 +163,8 @@ export const materializePendingSources = mutation({
     let created = 0;
     let linked = 0;
     for (const source of sourceHits) {
-      const result = await materializeSource(
-        ctx,
-        workspace._id,
-        source._id,
-        source,
-        Date.now(),
-      );
+      if (source.quarantineReason) continue;
+      const result = await materializeSource(ctx, workspace._id, source._id, source, Date.now());
       created += result;
       linked += result > 0 ? 1 : 0;
     }
@@ -174,11 +205,24 @@ async function materializeSource(
     return 0;
   }
 
-  const draft = extractCandidate(source);
+  if ("quarantineReason" in source && source.quarantineReason) return 0;
+
+  const draft =
+    "candidateDraft" in source && source.candidateDraft
+      ? source.candidateDraft
+      : extractCandidate(source);
+  const externalId =
+    "externalId" in draft && typeof draft.externalId === "string"
+      ? draft.externalId
+      : `candidate:${source.hash}`;
+  const dedupeKey =
+    "dedupeKey" in draft && typeof draft.dedupeKey === "string"
+      ? draft.dedupeKey
+      : normalizeKey(`${draft.company}-${draft.target}`);
   const existingCandidate = await ctx.db
     .query("dealCandidates")
     .withIndex("by_workspaceId_and_dedupeKey", (q) =>
-      q.eq("workspaceId", workspaceId).eq("dedupeKey", draft.dedupeKey),
+      q.eq("workspaceId", workspaceId).eq("dedupeKey", dedupeKey),
     )
     .take(1);
 
@@ -186,8 +230,8 @@ async function materializeSource(
   if (!candidateId) {
     candidateId = await ctx.db.insert("dealCandidates", {
       workspaceId,
-      externalId: draft.externalId,
-      dedupeKey: draft.dedupeKey,
+      externalId,
+      dedupeKey,
       status: "pending_review",
       company: draft.company,
       target: draft.target,
@@ -253,8 +297,12 @@ async function materializeSource(
 function isAdoptionSignal(headline: string, excerpt: string) {
   const text = `${headline} ${excerpt}`;
   return (
-    /\b(acquire|acquires|acquired|acquisition|merger|merges|partner|partners|partnership|partnered|collaborat\w*|joint venture|invests in|invested in|investment in|funding|deploys?|implements?|integrates?|launches?)\b/i.test(text) &&
-    /\b(ai|artificial intelligence|machine learning|generative|copilot|automation|model|robotics)\w*/i.test(text)
+    /\b(acquire|acquires|acquired|acquisition|merger|merges|partner|partners|partnership|partnered|collaborat\w*|joint venture|invests in|invested in|investment in|funding|deploys?|implements?|integrates?|launches?)\b/i.test(
+      text,
+    ) &&
+    /\b(ai|artificial intelligence|machine learning|generative|copilot|automation|model|robotics)\w*/i.test(
+      text,
+    )
   );
 }
 
@@ -354,5 +402,9 @@ function cleanName(value: string) {
 }
 
 function normalizeKey(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 180);
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 180);
 }

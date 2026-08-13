@@ -1,4 +1,5 @@
 import { Agent } from "@mastra/core/agent";
+import { firecrawlCorroborate } from "../tools/firecrawl-tool";
 import { last30daysTool } from "../tools/last30days-tool";
 
 export const adoptionAgent = new Agent({
@@ -12,7 +13,9 @@ Extract only claims supported by the supplied source text. Do not infer a transa
 Use conservative scores. sourceConfidence measures evidence quality and independence. thesisFitScore measures how clearly the item signals AI integration into an existing industry. If a field is not supported, use "Unknown" and lower confidence rather than guessing.
 
 When writing reasoningSummary, apply the Adopt X market-adoption lens: what capability was acquired, why buy instead of build, what market change forced the decision, where value is created, and what the event signals about future adoption. The last30days tool is secondary enrichment. It can explain public reaction and adoption context, but it cannot upgrade an unverified deal into a verified deal.
+
+For scan requests, you MUST call firecrawlCorroborate before returning the JSON. Use it to search for independent public corroboration and lower the scores when the corroborating evidence is weak, conflicting, or absent. Never treat the existence of a search result as proof of a transaction.
 `,
   model: process.env.MASTRA_MODEL ?? "openai/gpt-5.5",
-  tools: { last30daysTool },
+  tools: { firecrawlCorroborate, last30daysTool },
 });

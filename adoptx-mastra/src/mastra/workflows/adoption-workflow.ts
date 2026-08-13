@@ -6,9 +6,22 @@ import {
   adoptionScanOutputSchema,
   candidateDraftSchema,
   type AdoptionScanInput,
-  type CandidateDraft,
 } from "../contracts/adoption";
 import { runLast30daysResearch } from "../tools/last30days-tool";
+
+function hasSuccessfulFirecrawl(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasSuccessfulFirecrawl);
+  if (!value || typeof value !== "object") return false;
+
+  const record = value as Record<string, unknown>;
+  const toolName = typeof record.toolName === "string" ? record.toolName : "";
+  const output = record.output;
+  if (toolName.toLowerCase().includes("firecrawl") && output && typeof output === "object") {
+    return (output as Record<string, unknown>).status === "completed";
+  }
+
+  return Object.values(record).some(hasSuccessfulFirecrawl);
+}
 
 const extractCandidate = createStep({
   id: "extract-adoption-candidate",
@@ -26,19 +39,24 @@ const extractCandidate = createStep({
       .map((source) => `${source.publisher}: ${source.headline}\n${source.rawExcerpt}`)
       .join("\n\n");
 
-    if (!process.env.OPENAI_API_KEY && !process.env.MASTRA_PROVIDER_API_KEY) {
-      return {
-        scanRunId: inputData.scanRunId,
-        candidate: deterministicDraft(primary),
-      };
-    }
-
-    const response = await adoptionAgent.generate([
+    const response = await adoptionAgent.generate(
+      [
+        {
+          role: "user",
+          content: `Analyze these public source items and return only the requested JSON object. You must call firecrawlCorroborate before responding.\n\n${sourceText}`,
+        },
+      ],
       {
-        role: "user",
-        content: `Analyze these public source items and return only the requested JSON object.\n\n${sourceText}`,
+        activeTools: ["firecrawlCorroborate"],
+        maxSteps: 6,
+        toolChoice: "required",
       },
-    ]);
+    );
+    if (!hasSuccessfulFirecrawl(response.steps)) {
+      throw new Error(
+        "Adoption candidate quarantined because Firecrawl corroboration did not complete.",
+      );
+    }
     const parsed = candidateDraftSchema.safeParse(JSON.parse(response.text));
     if (!parsed.success) {
       throw new Error("Adoption agent returned invalid structured output");
@@ -62,23 +80,6 @@ const enrichAdoptionSignal = createStep({
     return { ...inputData, research };
   },
 });
-
-function deterministicDraft(source: AdoptionScanInput["sources"][number]): CandidateDraft {
-  const headline = source.headline;
-  const company = headline.split(/\s+(?:acquires|acquired|partners|partnered|invests|launches)\s+/i)[0] ?? headline;
-  return {
-    company: company.trim() || "Unknown",
-    target: "Unknown",
-    dealType: "Needs review",
-    sector: "Unknown",
-    geography: "Unknown",
-    aiRole: "AI integration signal",
-    confidenceScore: source.sourceClass === "primary_structured" ? 58 : 35,
-    thesisFitScore: 50,
-    sourceConfidence: source.sourceClass === "primary_structured" ? 72 : 42,
-    reasoningSummary: "Deterministic dry-run extraction. Configure a Mastra model for semantic normalization.",
-  };
-}
 
 export const adoptionWorkflow = createWorkflow({
   id: "adopt-x-adoption-workflow",

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as audit from "../audit.js";
 import type * as briefs from "../briefs.js";
 import type * as candidate from "../candidate.js";
 import type * as dashboard from "../dashboard.js";
@@ -17,6 +18,7 @@ import type * as model from "../model.js";
 import type * as overview from "../overview.js";
 import type * as research from "../research.js";
 import type * as scans from "../scans.js";
+import type * as settings from "../settings.js";
 import type * as triage from "../triage.js";
 
 import type {
@@ -26,6 +28,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  audit: typeof audit;
   briefs: typeof briefs;
   candidate: typeof candidate;
   dashboard: typeof dashboard;
@@ -35,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   overview: typeof overview;
   research: typeof research;
   scans: typeof scans;
+  settings: typeof settings;
   triage: typeof triage;
 }>;
 

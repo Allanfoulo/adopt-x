@@ -18,6 +18,8 @@ import {
   X,
   ChevronsLeft,
   ChevronsRight,
+  ShieldCheck,
+  type LucideIcon,
 } from "lucide-react";
 import { ToastViewport } from "@/components/app-toast";
 import overviewIcon from "../../docs/assets/dashboard-icons/overview.svg";
@@ -29,12 +31,13 @@ import settingsIcon from "../../docs/assets/dashboard-icons/settings.svg";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "adoptx.desktop.sidebarCollapsed";
 
-const nav = [
+const nav: Array<{ to: string; label: string; iconSrc?: string; icon?: LucideIcon }> = [
   { to: "/", label: "Overview", iconSrc: overviewIcon },
   { to: "/triage", label: "Triage Queue", iconSrc: triageQueueIcon },
   { to: "/candidate", label: "Candidate Detail", iconSrc: candidateDetailIcon },
   { to: "/briefs", label: "Brief Archive", iconSrc: briefArchiveIcon },
   { to: "/dashboard", label: "Dashboard", iconSrc: dashboardIcon },
+  { to: "/audit", label: "Audit Log", icon: ShieldCheck },
   { to: "/settings", label: "Settings", iconSrc: settingsIcon },
 ] as const;
 
@@ -105,7 +108,7 @@ function SidebarContent({
       </div>
 
       <nav className={collapsed ? "px-2 py-4 space-y-2" : "px-3 py-4 space-y-1"}>
-        {nav.map(({ to, label, iconSrc }) => {
+        {nav.map(({ to, label, iconSrc, icon: Icon }) => {
           const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
 
           return (
@@ -134,14 +137,23 @@ function SidebarContent({
                   : undefined
               }
             >
-              <img
-                src={iconSrc}
-                alt=""
-                aria-hidden="true"
-                className={`shrink-0 object-contain transition-opacity ${
-                  collapsed ? "h-5 w-5" : "h-4 w-4"
-                } ${active ? "opacity-100" : "opacity-70 group-hover:opacity-90"}`}
-              />
+              {iconSrc ? (
+                <img
+                  src={iconSrc}
+                  alt=""
+                  aria-hidden="true"
+                  className={`shrink-0 object-contain transition-opacity ${
+                    collapsed ? "h-5 w-5" : "h-4 w-4"
+                  } ${active ? "opacity-100" : "opacity-70 group-hover:opacity-90"}`}
+                />
+              ) : Icon ? (
+                <Icon
+                  aria-hidden="true"
+                  className={`shrink-0 transition-opacity ${
+                    collapsed ? "h-5 w-5" : "h-4 w-4"
+                  } ${active ? "opacity-100" : "opacity-70 group-hover:opacity-90"}`}
+                />
+              ) : null}
               {!collapsed && <span className={active ? "font-medium" : ""}>{label}</span>}
             </Link>
           );
@@ -244,10 +256,7 @@ export function AppShell({
     if (!hasLoadedSidebarPreference || typeof window === "undefined") return;
 
     try {
-      window.localStorage.setItem(
-        SIDEBAR_COLLAPSED_STORAGE_KEY,
-        String(sidebarCollapsed),
-      );
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(sidebarCollapsed));
     } catch {
       // Ignore storage failures and keep the current in-memory UI state.
     }

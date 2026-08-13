@@ -25,6 +25,51 @@ export const sourceRegistry: readonly SourceDefinition[] = [
     status: "configured",
   },
   {
+    key: "exchange_announcements",
+    sourceType: "exchange_announcement",
+    publisher: "Google News",
+    url: "https://news.google.com/rss/search?q=%22market+announcement%22+OR+%22exchange+announcement%22+AI&hl=en-US&gl=US&ceid=US:en",
+    sourceClass: "secondary_signal",
+    publisherReputation: "Medium",
+    status: "configured",
+  },
+  {
+    key: "ir_pages",
+    sourceType: "ir_release",
+    publisher: "Google News",
+    url: "https://news.google.com/rss/search?q=%22investor+relations%22+OR+%22company+press+release%22+OR+newsroom+AI&hl=en-US&gl=US&ceid=US:en",
+    sourceClass: "secondary_signal",
+    publisherReputation: "Medium",
+    status: "configured",
+  },
+  {
+    key: "pr_wires",
+    sourceType: "press_release",
+    publisher: "Google News",
+    url: "https://news.google.com/rss/search?q=site%3Aprnewswire.com+OR+site%3Abusinesswire.com+AI+acquisition+OR+AI+partnership&hl=en-US&gl=US&ceid=US:en",
+    sourceClass: "secondary_signal",
+    publisherReputation: "Medium",
+    status: "configured",
+  },
+  {
+    key: "sector_press",
+    sourceType: "sector_press",
+    publisher: "TechCrunch",
+    url: "https://techcrunch.com/category/artificial-intelligence/feed/",
+    sourceClass: "secondary_signal",
+    publisherReputation: "High",
+    status: "configured",
+  },
+  {
+    key: "business_press",
+    sourceType: "business_press",
+    publisher: "Dow Jones",
+    url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    sourceClass: "secondary_signal",
+    publisherReputation: "High",
+    status: "configured",
+  },
+  {
     key: "google_news_ai_adoption",
     sourceType: "ai_adoption_news",
     publisher: "Google News",
@@ -83,7 +128,14 @@ export function resolveSourceConfiguration(raw: string): SourceConfiguration {
   }
 
   if (Array.isArray(input)) {
-    return { feeds: validateFeeds(input), unconfiguredKeys: [] };
+    // Legacy arrays remain supported while inheriting newly configured registry sources.
+    return {
+      feeds: dedupeFeeds([
+        ...sourceRegistry.filter((source) => source.status === "configured"),
+        ...validateFeeds(input),
+      ]),
+      unconfiguredKeys: [],
+    };
   }
 
   if (!input || typeof input !== "object") {
@@ -107,6 +159,15 @@ export function resolveSourceConfiguration(raw: string): SourceConfiguration {
     feeds: dedupeFeeds([...registryFeeds, ...explicitFeeds]),
     unconfiguredKeys,
   };
+}
+
+/** Resolves legacy feed-array entries to the registry key used by Settings. */
+export function sourceKeyForFeed(feed: FeedConfig): string | null {
+  if (feed.key) return feed.key;
+  const match = sourceRegistry.find(
+    (source) => source.url === feed.url || source.sourceType === feed.sourceType,
+  );
+  return match?.key ?? null;
 }
 
 function validateFeeds(feeds: FeedConfig[]): FeedConfig[] {

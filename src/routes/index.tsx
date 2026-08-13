@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -47,6 +47,7 @@ type TopRunCard = {
   status: string;
   timestamp: string;
   cta: string;
+  route: "/triage" | "/briefs";
 };
 
 type SectorDistributionItem = {
@@ -131,12 +132,14 @@ const fallbackTopRunCards: TopRunCard[] = [
     status: "Completed",
     timestamp: "Today, 08:32 AM",
     cta: "View Scans",
+    route: "/triage",
   },
   {
     title: "Latest Brief Generation",
     status: "Brief Ready",
     timestamp: "Today, 09:05 AM",
     cta: "View Briefs",
+    route: "/briefs",
   },
 ] as const;
 
@@ -387,16 +390,19 @@ const fallbackAuditTrail: AuditTrailEntry[] = [
 ];
 
 function Overview() {
-  const { loading, updateToast, info, error } = useToast();
+  const { loading, updateToast } = useToast();
   const [runsTab, setRunsTab] = useState<"Runs" | "Activity">("Runs");
   const startScanAction = useAction(api.scans.start);
   const summary = useQuery(api.overview.getSummary, {});
   const view = buildOverviewView(summary);
+  const navigate = useNavigate();
+  const router = useRouter();
 
   const startScan = async () => {
     const toastId = loading({
       title: "Scan started",
-      description: "Windmill is collecting verified public deal sources. The queue will update when ingestion finishes.",
+      description:
+        "Windmill is collecting verified public deal sources. The queue will update when ingestion finishes.",
       action: { label: "Dismiss", emphasis: "secondary" },
     });
 
@@ -408,7 +414,7 @@ function Overview() {
         description: result.jobId
           ? `Windmill job ${result.jobId} is collecting sources now.`
           : "Windmill accepted the scan and is collecting sources now.",
-        action: { label: "View scan" },
+        action: { label: "View scan", onClick: () => navigate({ to: "/triage" }) },
         duration: 5200,
         dismissible: true,
       });
@@ -423,21 +429,8 @@ function Overview() {
     }
   };
 
-  const handleRunClick = (status: string, id: string) => {
-    if (status === "Failed") {
-      error({
-        title: `${id} failed`,
-        description: "This run stopped during cross-source verification and needs analyst review.",
-        action: { label: "View logs" },
-      });
-      return;
-    }
-
-    info({
-      title: `${id} selected`,
-      description: "Run details are available in the operational queue and audit trail.",
-      action: { label: "Open details", emphasis: "secondary" },
-    });
+  const handleRunClick = () => {
+    navigate({ to: "/triage" });
   };
 
   return (
@@ -475,7 +468,10 @@ function Overview() {
           </div>
         </section>
 
-        <OverviewFooterBar refreshLabel={view.refreshLabel} />
+        <OverviewFooterBar
+          refreshLabel={view.refreshLabel}
+          onRefresh={() => void router.invalidate()}
+        />
       </div>
     </AppShell>
   );
@@ -512,12 +508,14 @@ function buildOverviewView(summary: OverviewSummary | undefined) {
         status: summary.latestScan?.status ?? "Empty",
         timestamp: summary.latestScan?.timestamp ?? "No scan yet",
         cta: "View Scans",
+        route: "/triage" as const,
       },
       {
         title: "Latest Brief Generation",
         status: summary.latestBriefGeneration?.status ?? "Empty",
         timestamp: summary.latestBriefGeneration?.timestamp ?? "No brief run yet",
         cta: "View Briefs",
+        route: "/briefs" as const,
       },
     ],
     sectorDistribution: summary.sectorDistribution.slice(0, 4).map((item, index) => ({
@@ -579,6 +577,8 @@ function normalizeQueueStatus(status: string): RecentQueueActivityRow["status"] 
 }
 
 function OverviewHeaderActions({ onStartScan }: { onStartScan: () => void | Promise<void> }) {
+  const navigate = useNavigate();
+
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto lg:gap-3">
       <div className="relative hidden sm:block">
@@ -593,19 +593,23 @@ function OverviewHeaderActions({ onStartScan }: { onStartScan: () => void | Prom
       </div>
       <button
         type="button"
+        onClick={() => navigate({ to: "/triage" })}
         className="flex h-10 w-10 items-center justify-center rounded-lg border border-hairline bg-surface-1 sm:hidden"
         aria-label="Search"
       >
         <Search className="h-4 w-4 text-text-secondary" />
       </button>
-      <ToolbarButton icon={Filter}>Filters</ToolbarButton>
+      <ToolbarButton icon={Filter} onClick={() => navigate({ to: "/triage" })}>
+        Filters
+      </ToolbarButton>
       <PrimaryButton icon={Plus} onClick={onStartScan}>
         New Scan
       </PrimaryButton>
       <button
         type="button"
+        onClick={() => navigate({ to: "/settings" })}
         className="flex h-10 w-10 items-center justify-center rounded-lg border border-hairline bg-surface-1 text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
-        aria-label="More actions"
+        aria-label="Open settings"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -645,11 +649,13 @@ function OverviewRunStatusCard({
   status,
   timestamp,
   cta,
+  route,
 }: {
   title: string;
   status: string;
   timestamp: string;
   cta: string;
+  route: "/triage" | "/briefs";
 }) {
   const style = statusStyles[status] ?? statusStyles.Empty;
   const Icon = style.icon;
@@ -657,18 +663,21 @@ function OverviewRunStatusCard({
   return (
     <Panel className="px-4 py-4 sm:px-5">
       <div className="text-[10px] text-text-secondary">{title}</div>
-      <div className="mt-4 flex items-center gap-2 text-[11px] font-medium" style={{ color: style.color }}>
+      <div
+        className="mt-4 flex items-center gap-2 text-[11px] font-medium"
+        style={{ color: style.color }}
+      >
         <Icon className={`h-3.5 w-3.5 ${status === "Running" ? "animate-spin" : ""}`} />
         {status === "Brief Ready" ? "Ready" : status}
       </div>
       <div className="mt-3 text-[11px] text-text-secondary">{timestamp}</div>
       <div className="mt-4 flex justify-end">
-        <button
-          type="button"
+        <Link
+          to={route}
           className="inline-flex h-9 items-center rounded-md border border-hairline bg-surface-1 px-3 text-[10.5px] text-text-primary transition-colors hover:bg-surface-hover"
         >
           {cta}
-        </button>
+        </Link>
       </div>
     </Panel>
   );
@@ -708,9 +717,9 @@ function NeedsAttentionTable({ rows }: { rows: NeedsAttentionRow[] }) {
         <div className="text-[12px] font-semibold tracking-tight text-text-primary">
           Needs Attention <span className="text-text-secondary">({rows.length})</span>
         </div>
-        <button type="button" className="text-[10.5px] text-info hover:text-lime">
+        <Link to="/triage" className="text-[10.5px] text-info hover:text-lime">
           View all
-        </button>
+        </Link>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-[520px] w-full text-left text-[10.5px] text-text-secondary">
@@ -754,11 +763,7 @@ function NeedsAttentionTable({ rows }: { rows: NeedsAttentionRow[] }) {
           </tbody>
         </table>
       </div>
-      <CompactFooter
-        summary="Showing 1 to 5 of 7"
-        pages={["1", "2"]}
-        align="center"
-      />
+      <CompactFooter summary="Showing 1 to 5 of 7" pages={["1", "2"]} align="center" />
     </Panel>
   );
 }
@@ -770,9 +775,9 @@ function RecentApprovalsTable({ rows }: { rows: RecentApprovalRow[] }) {
         <div className="text-[12px] font-semibold tracking-tight text-text-primary">
           Recent Approvals
         </div>
-        <button type="button" className="text-[10.5px] text-info hover:text-lime">
+        <Link to="/briefs" className="text-[10.5px] text-info hover:text-lime">
           View all
-        </button>
+        </Link>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-[500px] w-full text-left text-[10.5px] text-text-secondary">
@@ -808,11 +813,7 @@ function RecentApprovalsTable({ rows }: { rows: RecentApprovalRow[] }) {
           </tbody>
         </table>
       </div>
-      <CompactFooter
-        summary="Showing 1 to 5 of 18"
-        pages={["1", "2", "3", "4"]}
-        align="center"
-      />
+      <CompactFooter summary="Showing 1 to 5 of 18" pages={["1", "2", "3", "4"]} align="center" />
     </Panel>
   );
 }
@@ -824,9 +825,9 @@ function RecentQueueActivityTable({ rows }: { rows: RecentQueueActivityRow[] }) 
         <div className="text-[12px] font-semibold tracking-tight text-text-primary">
           Recent Queue Activity
         </div>
-        <button type="button" className="text-[10.5px] text-info hover:text-lime">
+        <Link to="/triage" className="text-[10.5px] text-info hover:text-lime">
           View all
-        </button>
+        </Link>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-[920px] w-full text-left text-[10.5px] text-text-secondary">
@@ -861,11 +862,7 @@ function RecentQueueActivityTable({ rows }: { rows: RecentQueueActivityRow[] }) 
           </tbody>
         </table>
       </div>
-      <CompactFooter
-        summary="Showing 1 to 5 of 20"
-        pages={["1", "2", "3", "4"]}
-        align="center"
-      />
+      <CompactFooter summary="Showing 1 to 5 of 20" pages={["1", "2", "3", "4"]} align="center" />
     </Panel>
   );
 }
@@ -878,7 +875,7 @@ function OperationalRunsPanel({
 }: {
   activeTab: "Runs" | "Activity";
   onTabChange: (tab: "Runs" | "Activity") => void;
-  onRunClick: (status: string, id: string) => void;
+  onRunClick: () => void;
   rows: OperationalRunRow[];
 }) {
   return (
@@ -887,9 +884,9 @@ function OperationalRunsPanel({
         <div className="text-[12px] font-semibold tracking-tight text-text-primary">
           Operational Runs
         </div>
-        <button type="button" className="text-[10.5px] text-info hover:text-lime">
+        <Link to="/triage" className="text-[10.5px] text-info hover:text-lime">
           View all
-        </button>
+        </Link>
       </div>
 
       <div className="border-b border-hairline-soft px-4 pt-2 sm:px-5">
@@ -931,7 +928,7 @@ function OperationalRunsPanel({
                   return (
                     <tr
                       key={row.id}
-                      onClick={() => onRunClick(row.status, row.id)}
+                      onClick={onRunClick}
                       className="border-t border-hairline-soft cursor-pointer transition-colors hover:bg-surface-hover/30"
                     >
                       <td className="mono px-4 py-4 text-text-primary sm:px-5">{row.id}</td>
@@ -941,7 +938,9 @@ function OperationalRunsPanel({
                           className="inline-flex items-center gap-1.5 text-[10px]"
                           style={{ color: style.color }}
                         >
-                          <Icon className={`h-3.5 w-3.5 ${row.status === "Running" ? "animate-spin" : ""}`} />
+                          <Icon
+                            className={`h-3.5 w-3.5 ${row.status === "Running" ? "animate-spin" : ""}`}
+                          />
                           {row.status}
                         </span>
                       </td>
@@ -953,11 +952,7 @@ function OperationalRunsPanel({
               </tbody>
             </table>
           </div>
-          <CompactFooter
-            summary="Showing 1 to 5 of 12"
-            pages={["1", "2", "3"]}
-            align="center"
-          />
+          <CompactFooter summary="Showing 1 to 5 of 12" pages={["1", "2", "3"]} align="center" />
         </>
       ) : (
         <div className="space-y-3 px-4 py-4 sm:px-5">
@@ -986,9 +981,9 @@ function OverviewAuditTrailPanel({ entries }: { entries: AuditTrailEntry[] }) {
         <div className="text-[12px] font-semibold tracking-tight text-text-primary">
           Audit Trail <span className="text-text-secondary">(Recent)</span>
         </div>
-        <button type="button" className="text-[10.5px] text-info hover:text-lime">
+        <Link to="/audit" className="text-[10.5px] text-info hover:text-lime">
           View all
-        </button>
+        </Link>
       </div>
       <div className="space-y-4 px-4 py-4 sm:px-5">
         {entries.map((entry, index) => (
@@ -1029,7 +1024,13 @@ function OverviewAuditTrailPanel({ entries }: { entries: AuditTrailEntry[] }) {
   );
 }
 
-function OverviewFooterBar({ refreshLabel }: { refreshLabel: string }) {
+function OverviewFooterBar({
+  refreshLabel,
+  onRefresh,
+}: {
+  refreshLabel: string;
+  onRefresh: () => void;
+}) {
   return (
     <Panel className="px-4 py-3 sm:px-5">
       <div className="flex flex-col gap-3 text-[10.5px] text-text-secondary sm:flex-row sm:items-center sm:justify-between">
@@ -1039,6 +1040,7 @@ function OverviewFooterBar({ refreshLabel }: { refreshLabel: string }) {
           </span>
           <button
             type="button"
+            onClick={onRefresh}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-text-muted transition-colors hover:border-hairline hover:bg-surface-hover hover:text-text-primary"
             aria-label="Refresh overview"
           >
