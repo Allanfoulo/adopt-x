@@ -18,6 +18,7 @@ import type * as model from "../model.js";
 import type * as overview from "../overview.js";
 import type * as research from "../research.js";
 import type * as scans from "../scans.js";
+import type * as scoring from "../scoring.js";
 import type * as settings from "../settings.js";
 import type * as triage from "../triage.js";
 
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   overview: typeof overview;
   research: typeof research;
   scans: typeof scans;
+  scoring: typeof scoring;
   settings: typeof settings;
   triage: typeof triage;
 }>;

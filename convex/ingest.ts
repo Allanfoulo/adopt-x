@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx } from "./_generated/server";
 import { WORKSPACE_SLUG } from "./model";
 import { sourceClass } from "./schema";
+import { calculateCandidateScores } from "./scoring";
 
 const sourceInput = v.object({
   externalId: v.string(),
@@ -16,6 +17,13 @@ const sourceInput = v.object({
   rawExcerpt: v.string(),
   hash: v.string(),
   quarantineReason: v.optional(v.string()),
+  corroboration: v.optional(
+    v.object({
+      completed: v.boolean(),
+      resultCount: v.number(),
+      independentPublisherCount: v.number(),
+    }),
+  ),
   candidateDraft: v.optional(
     v.object({
       company: v.string(),
@@ -24,9 +32,6 @@ const sourceInput = v.object({
       sector: v.string(),
       geography: v.string(),
       aiRole: v.string(),
-      confidenceScore: v.number(),
-      thesisFitScore: v.number(),
-      sourceConfidence: v.number(),
       reasoningSummary: v.string(),
     }),
   ),
@@ -44,6 +49,11 @@ type SourceInput = {
   rawExcerpt: string;
   hash: string;
   quarantineReason?: string;
+  corroboration?: {
+    completed: boolean;
+    resultCount: number;
+    independentPublisherCount: number;
+  };
   candidateDraft?: {
     company: string;
     target: string;
@@ -51,9 +61,6 @@ type SourceInput = {
     sector: string;
     geography: string;
     aiRole: string;
-    confidenceScore: number;
-    thesisFitScore: number;
-    sourceConfidence: number;
     reasoningSummary: string;
   };
 };
@@ -125,6 +132,7 @@ export const ingestSourceBatch = mutation({
         rawExcerpt: source.rawExcerpt,
         hash: source.hash,
         quarantineReason: source.quarantineReason,
+        corroboration: source.corroboration,
         createdAt: now,
       });
       inserted += 1;
@@ -173,6 +181,75 @@ export const materializePendingSources = mutation({
   },
 });
 
+/** Recalculates legacy candidate scores from their linked source evidence. */
+export const recalculateCandidateScores = mutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const workspace = await getWorkspace(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 250, 1), 250);
+    const candidates = await ctx.db
+      .query("dealCandidates")
+      .withIndex("by_workspaceId_and_updatedAt", (q) => q.eq("workspaceId", workspace._id))
+      .order("asc")
+      .take(limit);
+
+    let updated = 0;
+    let skipped = 0;
+    for (const candidate of candidates) {
+      const editedFields = candidate.reviewEdits?.fields ?? [];
+      if (
+        editedFields.some((field) =>
+          ["confidenceScore", "thesisFitScore", "sourceConfidence"].includes(field),
+        )
+      ) {
+        skipped += 1;
+        continue;
+      }
+
+      const links = await ctx.db
+        .query("candidateSourceLinks")
+        .withIndex("by_workspaceId_and_candidateId", (q) =>
+          q.eq("workspaceId", workspace._id).eq("candidateId", candidate._id),
+        )
+        .take(12);
+      const sourceHits = [];
+      for (const link of links) {
+        const source = await ctx.db.get(link.sourceHitId);
+        if (source) sourceHits.push(source);
+      }
+      const source = sourceHits.sort((left, right) => {
+        const classRank = (value: typeof left.sourceClass) =>
+          value === "primary_structured" ? 0 : value === "secondary_signal" ? 1 : 2;
+        return (
+          classRank(left.sourceClass) - classRank(right.sourceClass) ||
+          right.publishedAt - left.publishedAt
+        );
+      })[0];
+      if (!source) {
+        skipped += 1;
+        continue;
+      }
+
+      const scores = calculateCandidateScores(
+        source,
+        {
+          company: candidate.company,
+          target: candidate.target,
+          dealType: candidate.dealType,
+          sector: candidate.sector,
+          geography: candidate.geography,
+          aiRole: candidate.aiRole,
+        },
+        Date.now(),
+      );
+      await ctx.db.patch(candidate._id, { ...scores, updatedAt: Date.now() });
+      updated += 1;
+    }
+
+    return { examined: candidates.length, updated, skipped };
+  },
+});
+
 async function getWorkspace(ctx: MutationCtx) {
   const workspace = await ctx.db
     .query("workspaces")
@@ -207,18 +284,14 @@ async function materializeSource(
 
   if ("quarantineReason" in source && source.quarantineReason) return 0;
 
-  const draft =
+  const extracted =
     "candidateDraft" in source && source.candidateDraft
       ? source.candidateDraft
       : extractCandidate(source);
-  const externalId =
-    "externalId" in draft && typeof draft.externalId === "string"
-      ? draft.externalId
-      : `candidate:${source.hash}`;
-  const dedupeKey =
-    "dedupeKey" in draft && typeof draft.dedupeKey === "string"
-      ? draft.dedupeKey
-      : normalizeKey(`${draft.company}-${draft.target}`);
+  const scores = calculateCandidateScores(source, extracted, now);
+  const draft = { ...extracted, ...scores };
+  const externalId = `candidate:${source.hash}`;
+  const dedupeKey = normalizeKey(`${draft.company}-${draft.target}`);
   const existingCandidate = await ctx.db
     .query("dealCandidates")
     .withIndex("by_workspaceId_and_dedupeKey", (q) =>
@@ -243,6 +316,7 @@ async function materializeSource(
       confidenceScore: draft.confidenceScore,
       thesisFitScore: draft.thesisFitScore,
       sourceConfidence: draft.sourceConfidence,
+      scoreBreakdown: draft.scoreBreakdown,
       reasoningSummary: draft.reasoningSummary,
       createdAt: now,
       updatedAt: now,
@@ -317,12 +391,6 @@ function extractCandidate(source: SourceInput | Doc<"sourceHits">) {
         ? "strategic_partnership"
         : "product_launch";
   const sector = inferSector(text);
-  const sourceConfidence = source.sourceClass === "primary_structured" ? 72 : 48;
-  const thesisFitScore = Math.min(
-    95,
-    48 + (dealType === "product_launch" ? 8 : 20) + (sector === "other" ? 0 : 10),
-  );
-
   return {
     externalId: `candidate:${source.hash}`,
     dedupeKey: normalizeKey(`${names.company}-${names.target}`),
@@ -332,9 +400,6 @@ function extractCandidate(source: SourceInput | Doc<"sourceHits">) {
     sector,
     geography: inferGeography(text),
     aiRole: inferAiRole(text),
-    confidenceScore: sourceConfidence - (names.target === "Unknown" ? 15 : 0),
-    thesisFitScore,
-    sourceConfidence,
     reasoningSummary:
       names.target === "Unknown"
         ? "AI adoption signal detected; target and transaction details require analyst review."

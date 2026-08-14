@@ -19,9 +19,6 @@ export const candidateDraftSchema = z.object({
   sector: z.string(),
   geography: z.string(),
   aiRole: z.string(),
-  confidenceScore: z.number().min(0).max(100),
-  thesisFitScore: z.number().min(0).max(100),
-  sourceConfidence: z.number().min(0).max(100),
   reasoningSummary: z.string(),
 });
 

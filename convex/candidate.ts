@@ -55,7 +55,10 @@ export const getDetail = query({
         )
         .order("desc")
         .take(8),
-      ctx.db.query("users").withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspaceId)).take(20),
+      ctx.db
+        .query("users")
+        .withIndex("by_workspaceId", (q) => q.eq("workspaceId", workspaceId))
+        .take(20),
     ]);
 
     const sources = [];
@@ -67,7 +70,10 @@ export const getDetail = query({
     }
 
     const usersById = new Map(users.map((user) => [user._id, user]));
-    const assignedTo = candidate.assignedToUserId ? usersById.get(candidate.assignedToUserId) : null;
+    const assignedTo = candidate.assignedToUserId
+      ? usersById.get(candidate.assignedToUserId)
+      : null;
+    const scoreSource = candidate.scoreBreakdown ? "rubric" : "ai";
 
     return {
       candidate: candidateRow(candidate),
@@ -85,19 +91,21 @@ export const getDetail = query({
           label: "Confidence Score",
           value: candidate.confidenceScore,
           helper: "High confidence in the accuracy of the extracted facts.",
-          source: candidate.reviewEdits?.fields.includes("confidenceScore") ? "human" : "ai",
+          source: candidate.reviewEdits?.fields.includes("confidenceScore") ? "human" : scoreSource,
         },
         {
           label: "Thesis-Fit Score",
           value: candidate.thesisFitScore,
           helper: "Strength of alignment with the AI adoption thesis.",
-          source: candidate.reviewEdits?.fields.includes("thesisFitScore") ? "human" : "ai",
+          source: candidate.reviewEdits?.fields.includes("thesisFitScore") ? "human" : scoreSource,
         },
         {
           label: "Source Confidence",
           value: candidate.sourceConfidence,
           helper: "Quality, independence, and consistency of cited sources.",
-          source: "ai",
+          source: candidate.reviewEdits?.fields.includes("sourceConfidence")
+            ? "human"
+            : scoreSource,
         },
       ],
       validationRows: [
@@ -109,17 +117,27 @@ export const getDetail = query({
       scoreExplanations: [
         {
           title: `Confidence Score (${candidate.confidenceScore})`,
-          body: "Based on extracted fact consistency and candidate scoring from verified public sources.",
+          body: candidate.scoreBreakdown
+            ? `Calculated by ${candidate.scoreBreakdown.version} from the components below.`
+            : "Historical score; no rubric breakdown was stored for this candidate.",
+          components: candidate.scoreBreakdown?.confidence ?? [],
         },
         {
           title: `Thesis-Fit Score (${candidate.thesisFitScore})`,
-          body: `Measures fit with the Adopt X thesis for ${titleCase(candidate.aiRole)} in ${titleCase(candidate.sector)}.`,
+          body: candidate.scoreBreakdown
+            ? `Calculated by ${candidate.scoreBreakdown.version} from the components below.`
+            : "Historical score; no rubric breakdown was stored for this candidate.",
+          components: candidate.scoreBreakdown?.thesisFit ?? [],
         },
         {
           title: `Source Confidence (${candidate.sourceConfidence})`,
-          body: "Reflects source quality, publisher reputation, and provenance coverage.",
+          body: candidate.scoreBreakdown
+            ? `Calculated by ${candidate.scoreBreakdown.version} from the components below.`
+            : "Historical score; no rubric breakdown was stored for this candidate.",
+          components: candidate.scoreBreakdown?.sourceConfidence ?? [],
         },
       ],
+      scoreBreakdown: candidate.scoreBreakdown ?? null,
       auditTrail: auditEvents.map((event) => auditRow(event, usersById)),
       reviewState: {
         status: candidateStatusLabels[candidate.status],
@@ -345,8 +363,8 @@ export const reviewCandidates = mutation({
         after: candidateStatusLabels[nextStatus],
         reason:
           args.action === "approve"
-            ? args.reason ?? "Approved from analyst review."
-            : args.reason ?? "Rejected by analyst review.",
+            ? (args.reason ?? "Approved from analyst review.")
+            : (args.reason ?? "Rejected by analyst review."),
         correlationId,
         createdAt: now,
       });
@@ -375,7 +393,9 @@ export const reviewCandidates = mutation({
   },
 });
 
-function candidatePropertyFor(field: string):
+function candidatePropertyFor(
+  field: string,
+):
   | "company"
   | "target"
   | "sector"
@@ -459,10 +479,7 @@ function sourceRow(source: Doc<"sourceHits">, n: number) {
   };
 }
 
-function auditRow(
-  event: Doc<"reviewAuditEvents">,
-  usersById: Map<Id<"users">, Doc<"users">>,
-) {
+function auditRow(event: Doc<"reviewAuditEvents">, usersById: Map<Id<"users">, Doc<"users">>) {
   const actor = event.actorUserId ? usersById.get(event.actorUserId) : null;
   return {
     name: actor?.displayName ?? titleCase(event.actorType),
@@ -475,7 +492,16 @@ function auditRow(
 }
 
 function factOrder(field: string) {
-  const order = ["Company", "Target", "Sector", "Geography", "Deal Type", "AI Role", "Announcement Date", "Source Class"];
+  const order = [
+    "Company",
+    "Target",
+    "Sector",
+    "Geography",
+    "Deal Type",
+    "AI Role",
+    "Announcement Date",
+    "Source Class",
+  ];
   const index = order.indexOf(field);
   return index === -1 ? order.length : index;
 }

@@ -7,6 +7,7 @@ export type CollectedSource = {
   sourceClass: "primary_structured" | "secondary_signal" | "community";
   sourceType: string;
   publisher: string;
+  publisherReputation?: string;
   url: string;
   headline: string;
   publishedAt: number;
@@ -55,6 +56,7 @@ export async function collectFeedsWithDiagnostics(
           sourceClass: feed.sourceClass ?? "primary_structured",
           sourceType: feed.sourceType,
           publisher: feed.publisher,
+          publisherReputation: feed.publisherReputation,
           url,
           headline: stripMarkup(headline),
           publishedAt: published ? Date.parse(published) || Date.now() : Date.now(),

@@ -21,15 +21,17 @@ type CandidateDraft = {
   sector: string;
   geography: string;
   aiRole: string;
-  confidenceScore: number;
-  thesisFitScore: number;
-  sourceConfidence: number;
   reasoningSummary: string;
 };
 
 type PreparedSource = Source & {
   candidateDraft?: CandidateDraft;
   quarantineReason?: string;
+  corroboration?: {
+    completed: boolean;
+    resultCount: number;
+    independentPublisherCount: number;
+  };
 };
 
 type AgentResponse = {
@@ -120,9 +122,10 @@ async function analyzeSource(
       throw new Error("Firecrawl corroboration did not complete");
     }
 
+    const corroboration = summarizeFirecrawl(payload.toolResults ?? payload.steps ?? payload);
     const candidateDraft = parseCandidateDraft(payload.object ?? payload.text);
     if (!candidateDraft) throw new Error("Adoption agent returned invalid candidate JSON");
-    return { ...source, candidateDraft };
+    return { ...source, candidateDraft, corroboration };
   } catch (error) {
     return {
       ...source,
@@ -144,8 +147,55 @@ function isPotentialAdoptionSignal(source: Source) {
 }
 
 function hasSuccessfulFirecrawl(value: unknown): boolean {
-  const serialized = JSON.stringify(value);
-  return /firecrawl/i.test(serialized) && /"status"\s*:\s*"completed"/i.test(serialized);
+  return summarizeFirecrawl(value).completed;
+}
+
+function summarizeFirecrawl(value: unknown) {
+  const urls = new Set<string>();
+  let resultCount = 0;
+  let completed = false;
+
+  function visit(current: unknown) {
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (!current || typeof current !== "object") return;
+    const record = current as Record<string, unknown>;
+    const toolName =
+      typeof record.toolName === "string"
+        ? record.toolName
+        : typeof record.name === "string"
+          ? record.name
+          : "";
+    const output = record.output ?? record.result;
+    if (toolName.toLowerCase().includes("firecrawl") && output && typeof output === "object") {
+      const outputRecord = output as Record<string, unknown>;
+      if (outputRecord.status === "completed") {
+        completed = true;
+        const evidence = Array.isArray(outputRecord.evidence) ? outputRecord.evidence : [];
+        resultCount += evidence.length;
+        for (const item of evidence) {
+          if (!item || typeof item !== "object") continue;
+          const url = (item as Record<string, unknown>).url;
+          if (typeof url !== "string") continue;
+          try {
+            urls.add(new URL(url).hostname.toLowerCase());
+          } catch {
+            // Ignore malformed evidence URLs; the tool schema rejects them upstream.
+          }
+        }
+      }
+    }
+    Object.values(record).forEach(visit);
+  }
+
+  visit(value);
+  return {
+    completed,
+    resultCount,
+    independentPublisherCount: urls.size,
+  };
 }
 
 function parseCandidateDraft(value: unknown): CandidateDraft | null {
@@ -162,17 +212,6 @@ function parseCandidateDraft(value: unknown): CandidateDraft | null {
     "reasoningSummary",
   ];
   if (stringFields.some((field) => typeof record[field] !== "string")) return null;
-  const numericFields = ["confidenceScore", "thesisFitScore", "sourceConfidence"];
-  if (
-    numericFields.some(
-      (field) =>
-        typeof record[field] !== "number" ||
-        Number(record[field]) < 0 ||
-        Number(record[field]) > 100,
-    )
-  ) {
-    return null;
-  }
   return {
     company: String(record.company),
     target: String(record.target),
@@ -180,9 +219,6 @@ function parseCandidateDraft(value: unknown): CandidateDraft | null {
     sector: String(record.sector),
     geography: String(record.geography),
     aiRole: String(record.aiRole),
-    confidenceScore: Number(record.confidenceScore),
-    thesisFitScore: Number(record.thesisFitScore),
-    sourceConfidence: Number(record.sourceConfidence),
     reasoningSummary: String(record.reasoningSummary),
   };
 }

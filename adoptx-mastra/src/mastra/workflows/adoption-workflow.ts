@@ -14,8 +14,13 @@ function hasSuccessfulFirecrawl(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
 
   const record = value as Record<string, unknown>;
-  const toolName = typeof record.toolName === "string" ? record.toolName : "";
-  const output = record.output;
+  const toolName =
+    typeof record.toolName === "string"
+      ? record.toolName
+      : typeof record.name === "string"
+        ? record.name
+        : "";
+  const output = record.output ?? record.result;
   if (toolName.toLowerCase().includes("firecrawl") && output && typeof output === "object") {
     return (output as Record<string, unknown>).status === "completed";
   }
@@ -33,7 +38,6 @@ const extractCandidate = createStep({
   }),
   execute: async ({ inputData }) => {
     if (!inputData) throw new Error("Scan input not found");
-    const primary = inputData.sources[0];
     const sourceText = inputData.sources
       .slice(0, 12)
       .map((source) => `${source.publisher}: ${source.headline}\n${source.rawExcerpt}`)

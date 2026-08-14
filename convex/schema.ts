@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { scoreBreakdownValidator } from "./scoring";
 
 export const userRole = v.union(v.literal("analyst"), v.literal("admin"));
 
@@ -121,6 +122,13 @@ export default defineSchema({
     externalId: v.string(),
     hash: v.string(),
     quarantineReason: v.optional(v.string()),
+    corroboration: v.optional(
+      v.object({
+        completed: v.boolean(),
+        resultCount: v.number(),
+        independentPublisherCount: v.number(),
+      }),
+    ),
     createdAt: v.number(),
   })
     .index("by_workspaceId_and_externalId", ["workspaceId", "externalId"])
@@ -148,6 +156,7 @@ export default defineSchema({
     confidenceScore: v.number(),
     thesisFitScore: v.number(),
     sourceConfidence: v.number(),
+    scoreBreakdown: v.optional(scoreBreakdownValidator),
     reasoningSummary: v.optional(v.string()),
     reviewEdits: v.optional(
       v.object({

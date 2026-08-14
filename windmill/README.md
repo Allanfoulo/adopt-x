@@ -13,6 +13,20 @@ This folder includes a `wmill.yaml` sync configuration. From a machine with the 
 5. The flow calls `ingest:ingestSourceBatch`, which is idempotent by external id and content hash; failed agent items remain quarantined as source hits.
 6. Call `f/flows/research_candidate.ts` only for new, ambiguous, high-confidence, or approved candidates. Configure it to call `f/flows/last30days_runner.ts`.
 
+## Deterministic scoring
+
+The adoption agent does not generate `confidenceScore`, `thesisFitScore`, or `sourceConfidence`. Convex calculates them with `rubric-v1` after ingestion. The rubric records point components for source quality, thesis fit, and factual confidence. Older fixture candidates may not have a stored breakdown and are treated as historical data. Newly materialized candidates always store the rubric breakdown for review and audit.
+
+After deploying the Convex functions, legacy candidates with linked source
+evidence can be recalculated with the `ingest:recalculateCandidateScores`
+mutation. The mutation skips candidates with explicit human score edits and
+does not fabricate scores for candidates without source evidence. Run it in
+batches from the project root, for example:
+
+```powershell
+npx convex run ingest:recalculateCandidateScores '{"limit":250}'
+```
+
 ## Environment
 
 - `CONVEX_URL`: Adopt X Convex deployment URL.

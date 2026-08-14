@@ -59,7 +59,7 @@ type ScoreRow = {
   label: string;
   value: number;
   helper: string;
-  source: "ai" | "human";
+  source: "ai" | "human" | "rubric";
 };
 
 type ValidationRow = {
@@ -70,6 +70,7 @@ type ValidationRow = {
 type ScoreExplanation = {
   title: string;
   body: string;
+  components: { label: string; points: number; rationale: string }[];
 };
 
 type AuditTrailEntry = {
@@ -229,14 +230,17 @@ const scoreExplanations = [
   {
     title: "Confidence Score (86)",
     body: "Based on source quality, recency, and consistency across multiple high-signal sources.",
+    components: [],
   },
   {
     title: "Thesis-Fit Score (88)",
     body: "Strong alignment with our thesis on AI-enabled clinical workflow automation.",
+    components: [],
   },
   {
     title: "Source Confidence (92)",
     body: "High-quality, relevant, and independent sources with consistent details.",
+    components: [],
   },
 ];
 
@@ -323,10 +327,13 @@ function CandidateDetail() {
   const view = detail;
   const visibleFacts = view.facts.map((fact) => ({
     ...fact,
-    value: isEditing ? draftFacts[fact.label] ?? fact.value : fact.value,
+    value: isEditing ? (draftFacts[fact.label] ?? fact.value) : fact.value,
   }));
   const changedFacts = view.facts
-    .filter((fact) => isEditing && draftFacts[fact.label] !== undefined && draftFacts[fact.label] !== fact.value)
+    .filter(
+      (fact) =>
+        isEditing && draftFacts[fact.label] !== undefined && draftFacts[fact.label] !== fact.value,
+    )
     .map((fact) => ({ field: fact.label, value: draftFacts[fact.label] }));
   const isDirty = changedFacts.length > 0;
 
@@ -418,7 +425,9 @@ function CandidateDetail() {
         onClick={() => void saveFacts()}
         disabled={!isEditing || !isDirty || isSaving}
         className={`h-10 rounded-lg border border-hairline bg-surface-1 px-4 text-[12px] text-text-muted ${
-          isEditing && isDirty && !isSaving ? "text-text-primary hover:bg-surface-hover" : "cursor-not-allowed opacity-50"
+          isEditing && isDirty && !isSaving
+            ? "text-text-primary hover:bg-surface-hover"
+            : "cursor-not-allowed opacity-50"
         }`}
       >
         {isSaving ? "Saving..." : "Save Changes"}
@@ -478,7 +487,9 @@ function CandidateDetail() {
                 facts={visibleFacts}
                 editing={isEditing}
                 onEdit={beginEditing}
-                onChange={(field, value) => setDraftFacts((current) => ({ ...current, [field]: value }))}
+                onChange={(field, value) =>
+                  setDraftFacts((current) => ({ ...current, [field]: value }))
+                }
               />
             </div>
 
@@ -561,7 +572,10 @@ function ReviewStateCard({ reviewState }: { reviewState: CandidateDetailData["re
           <Info className="h-3.5 w-3.5 text-text-muted" />
         </div>
         <div className="space-y-4 text-[11.5px]">
-          <ReviewRow label="Overall Status" value={<StatusBadge status={reviewState.status} size="xs" />} />
+          <ReviewRow
+            label="Overall Status"
+            value={<StatusBadge status={reviewState.status} size="xs" />}
+          />
           <ReviewRow
             label="Assigned To"
             value={<span className="font-medium text-text-primary">{reviewState.assignedTo}</span>}
@@ -570,7 +584,10 @@ function ReviewStateCard({ reviewState }: { reviewState: CandidateDetailData["re
             label="Assigned On"
             value={<span className="text-text-primary">{reviewState.assignedOn}</span>}
           />
-          <ReviewRow label="SLA" value={<span className="text-text-primary">{reviewState.sla}</span>} />
+          <ReviewRow
+            label="SLA"
+            value={<span className="text-text-primary">{reviewState.sla}</span>}
+          />
         </div>
       </div>
     </Panel>
@@ -664,7 +681,10 @@ function ExtractedFactsCard({
           <div>Status</div>
         </div>
         {facts.map((fact) => (
-          <div key={fact.label} className="grid grid-cols-[1fr_1fr_auto] gap-3 px-4 py-2.5 text-[11.5px]">
+          <div
+            key={fact.label}
+            className="grid grid-cols-[1fr_1fr_auto] gap-3 px-4 py-2.5 text-[11.5px]"
+          >
             <div className="text-text-secondary">{fact.label}</div>
             <div className="text-text-primary">
               {editing ? (
@@ -732,17 +752,23 @@ function AttributesScoresCard({ facts, scoreRows }: { facts: FactRow[]; scoreRow
         {facts
           .filter((fact) => ["Sector", "Deal Type", "AI Role", "Geography"].includes(fact.label))
           .map((item) => (
-          <div key={item.label} className="grid grid-cols-[160px_1fr_auto] gap-3 border-t border-hairline-soft py-2.5 text-[11.5px]">
-            <div className="text-text-secondary">{item.label}</div>
-            <div className="text-text-primary">{item.value}</div>
-            <SourceChip source={item.source} />
-          </div>
-        ))}
+            <div
+              key={item.label}
+              className="grid grid-cols-[160px_1fr_auto] gap-3 border-t border-hairline-soft py-2.5 text-[11.5px]"
+            >
+              <div className="text-text-secondary">{item.label}</div>
+              <div className="text-text-primary">{item.value}</div>
+              <SourceChip source={item.source} />
+            </div>
+          ))}
       </div>
       <div className="border-t border-hairline-soft px-4 py-3">
         <div className="space-y-4">
           {scoreRows.map((row) => (
-            <div key={row.label} className="grid grid-cols-[160px_auto_1fr_auto] items-center gap-3">
+            <div
+              key={row.label}
+              className="grid grid-cols-[160px_auto_1fr_auto] items-center gap-3"
+            >
               <div className="flex items-center gap-1.5 text-[11.5px] text-text-secondary">
                 {row.label}
                 <Info className="h-3.5 w-3.5 text-text-muted" />
@@ -845,6 +871,20 @@ function ScoreExplanationsCard({ items }: { items: ScoreExplanation[] }) {
             <div className="space-y-1">
               <div className="text-[11.5px] font-medium text-text-primary">{item.title}</div>
               <div className="text-[10.5px] leading-relaxed text-text-secondary">{item.body}</div>
+              {item.components.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {item.components.map((component) => (
+                    <div
+                      key={`${item.title}-${component.label}`}
+                      className="text-[10px] leading-relaxed text-text-secondary"
+                    >
+                      <span className="text-text-primary">{component.label}</span>{" "}
+                      <span className="mono text-lime">+{component.points}</span>{" "}
+                      <span>{component.rationale}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -994,7 +1034,7 @@ function TypeChip({ tone, label }: { tone: string; label: string }) {
   );
 }
 
-function SourceChip({ source }: { source: "ai" | "human" }) {
+function SourceChip({ source }: { source: "ai" | "human" | "rubric" }) {
   if (source === "human") {
     return (
       <span
@@ -1006,6 +1046,21 @@ function SourceChip({ source }: { source: "ai" | "human" }) {
         }}
       >
         <User className="h-3 w-3" /> Human edited
+      </span>
+    );
+  }
+
+  if (source === "rubric") {
+    return (
+      <span
+        className="inline-flex h-5 items-center gap-1 rounded px-1.5 text-[9px] font-medium"
+        style={{
+          color: "#8EEA45",
+          background: "rgba(142,234,69,0.10)",
+          border: "1px solid rgba(142,234,69,0.30)",
+        }}
+      >
+        <CheckCircle2 className="h-3 w-3" /> Rubric v1
       </span>
     );
   }
