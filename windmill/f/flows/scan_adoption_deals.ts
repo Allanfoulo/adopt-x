@@ -67,7 +67,7 @@ type AgentResponse = {
 const ingestSourceBatch = makeFunctionReference<"mutation">("ingest:ingestSourceBatch");
 
 /** Windmill flow entry point after collectors have returned normalized sources. */
-export async function main(sourceTypes: string[], sources: Source[]) {
+export async function main(sourceTypes: string[], sources: Source[], externalRunId?: string) {
   const convexUrl = Deno.env.get("CONVEX_URL");
   if (!convexUrl) throw new Error("CONVEX_URL is required");
   const mastraUrl = Deno.env.get("MASTRA_SERVER_URL")?.replace(/\/$/, "");
@@ -92,7 +92,7 @@ export async function main(sourceTypes: string[], sources: Source[]) {
 
   const client = new ConvexHttpClient(convexUrl);
   return await client.mutation(ingestSourceBatch, {
-    externalRunId: `windmill-${crypto.randomUUID()}`,
+    externalRunId: externalRunId ?? `windmill-${crypto.randomUUID()}`,
     sourceTypes,
     sources: preparedSources,
   });

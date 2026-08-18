@@ -5,9 +5,19 @@ import { ConvexHttpClient } from "npm:convex/browser";
 import { makeFunctionReference } from "npm:convex/server";
 
 const getRuntimeConfig = makeFunctionReference<"query">("settings:getRuntimeConfig");
+const failScan = makeFunctionReference<"mutation">("scans:fail");
 
 /** Scheduled Windmill entry point for the recurring Adopt X scan. */
-export async function main() {
+export async function main(externalRunId?: string) {
+  try {
+    return await runScan(externalRunId);
+  } catch (error) {
+    await reportScanFailure(externalRunId, error);
+    throw error;
+  }
+}
+
+async function runScan(externalRunId?: string) {
   const rawFeeds = Deno.env.get("ADOPTX_FEEDS_JSON");
   const convexUrl = Deno.env.get("CONVEX_URL");
   if (!rawFeeds) {
@@ -53,6 +63,7 @@ export async function main() {
   const result = await ingestBatch(
     [...new Set(collection.sources.map((source) => source.sourceType))],
     collection.sources,
+    externalRunId,
   );
 
   return {
@@ -63,4 +74,21 @@ export async function main() {
     unconfiguredSourceKeys: configuration.unconfiguredKeys,
     feedFailures: collection.failures,
   };
+}
+
+async function reportScanFailure(externalRunId: string | undefined, error: unknown) {
+  if (!externalRunId) return;
+  const convexUrl = Deno.env.get("CONVEX_URL");
+  if (!convexUrl) return;
+
+  const message = error instanceof Error ? error.message : "Windmill scan failed.";
+  try {
+    const client = new ConvexHttpClient(convexUrl);
+    await client.mutation(failScan, {
+      externalRunId,
+      error: message.slice(0, 1000),
+    });
+  } catch {
+    // Preserve the original Windmill failure if telemetry cannot be reported.
+  }
 }

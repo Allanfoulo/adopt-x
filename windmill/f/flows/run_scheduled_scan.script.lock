@@ -129,7 +129,7 @@
     }
   },
   "remote": {
-    "http://localhost:45947/api/scripts_u/empty_ts/tmp/windmill/wk-default-5425bea2eec8-ieuWL/019febbf-a5e7-f512-772c-07efcdcebcd9/scan_adoption_deals.ts": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "http://localhost:45947/api/scripts_u/empty_ts/tmp/windmill/wk-default-5425bea2eec8-ieuWL/01a01746-91f2-e1d2-c183-0c2050148c7b/scan_adoption_deals.ts": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "http://localhost:45947/api/scripts_u/empty_ts/tmp/windmill/wk-default-5425bea2eec8-ieuWL/collectors/public_feed.ts": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "http://localhost:45947/api/scripts_u/empty_ts/tmp/windmill/wk-default-5425bea2eec8-ieuWL/config/source_registry.ts": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   }

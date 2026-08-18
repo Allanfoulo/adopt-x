@@ -187,7 +187,7 @@ const startScanReference: FunctionReference<
   "action",
   "public",
   Record<string, never>,
-  { jobId: string | null }
+  { jobId: string | null; externalRunId: string }
 > = makeFunctionReference("scans:start");
 
 type QueueBriefsResult = { runId: string; queued: number };

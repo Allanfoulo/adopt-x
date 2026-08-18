@@ -130,17 +130,36 @@ export const ingestSourceBatch = mutation({
 
     const workspace = await getWorkspace(ctx);
     const now = Date.now();
-    const runId = await ctx.db.insert("scanRuns", {
-      workspaceId: workspace._id,
-      externalRunId: args.externalRunId,
-      status: "running",
-      sourceTypes: args.sourceTypes,
-      hitCount: 0,
-      candidateCount: 0,
-      errorCount: 0,
-      startedAt: now,
-      createdAt: now,
-    });
+    const existingRun = await ctx.db
+      .query("scanRuns")
+      .withIndex("by_workspaceId_and_externalRunId", (q) =>
+        q.eq("workspaceId", workspace._id).eq("externalRunId", args.externalRunId),
+      )
+      .take(1);
+    const runId =
+      existingRun[0]?._id ??
+      (await ctx.db.insert("scanRuns", {
+        workspaceId: workspace._id,
+        externalRunId: args.externalRunId,
+        status: "running",
+        sourceTypes: args.sourceTypes,
+        hitCount: 0,
+        candidateCount: 0,
+        errorCount: 0,
+        startedAt: now,
+        createdAt: now,
+      }));
+    if (existingRun[0]) {
+      await ctx.db.patch(existingRun[0]._id, {
+        status: "running",
+        sourceTypes: args.sourceTypes,
+        hitCount: 0,
+        candidateCount: 0,
+        errorCount: 0,
+        error: undefined,
+        completedAt: undefined,
+      });
+    }
 
     let inserted = 0;
     let duplicates = 0;
