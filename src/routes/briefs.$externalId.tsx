@@ -1,16 +1,28 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { FunctionReference } from "convex/server";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { z } from "zod";
 import { ArrowLeft, Download, ExternalLink, Share2 } from "lucide-react";
 import { AppShell, CompanyMark, Panel, StatusBadge, ToolbarButton } from "@/components/app-shell";
 import { useToast } from "@/components/app-toast";
 import { buildBriefPdf, slugify } from "@/lib/brief-pdf";
-import type { ArchiveDetail, ArchiveRow, BriefOpportunity, BriefPoint } from "@/lib/brief-types";
+import type {
+  ArchiveDetail,
+  ArchiveRow,
+  BriefOpportunity,
+  BriefPoint,
+  ThesisMap,
+} from "@/lib/brief-types";
 
 export const Route = createFileRoute("/briefs/$externalId")({
   head: () => ({ meta: [{ title: "Brief Detail - Adopt X" }] }),
+  validateSearch: z.object({
+    view: z.enum(["brief", "thesis-map", "evidence", "sources"]).optional(),
+    claimId: z.string().optional(),
+  }),
   component: BriefReader,
 });
 
@@ -43,32 +55,80 @@ const sections = [
   "Revision History",
 ] as const;
 
+const viewTabs = [
+  { value: "brief", label: "Brief" },
+  { value: "thesis-map", label: "Thesis Map" },
+  { value: "evidence", label: "Evidence" },
+  { value: "sources", label: "Sources" },
+] as const;
+
 function BriefReader() {
   const { externalId } = Route.useParams();
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const detail = useQuery(getArchiveDetailReference, { externalId });
   const { info, success } = useToast();
+  const view = search.view ?? "brief";
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(search.claimId ?? null);
+
+  useEffect(() => {
+    setSelectedClaimId(search.claimId ?? null);
+  }, [search.claimId]);
+
+  const selectView = (nextView: (typeof viewTabs)[number]["value"]) => {
+    void navigate({
+      search: (current) => ({
+        ...current,
+        view: nextView === "brief" ? undefined : nextView,
+        claimId: undefined,
+      }),
+    });
+  };
+
+  const selectClaim = (claimId: string) => {
+    setSelectedClaimId(claimId);
+    void navigate({
+      search: (current) => ({ ...current, view: "thesis-map", claimId }),
+    });
+  };
 
   if (detail === undefined) {
-    return <AppShell title="Brief Reader" subtitle="Loading the selected brief"><ReaderState message="Loading the live brief..." /></AppShell>;
+    return (
+      <AppShell title="Brief Reader" subtitle="Loading the selected brief">
+        <ReaderState message="Loading the live brief..." />
+      </AppShell>
+    );
   }
 
   if (!detail) {
-    return <AppShell title="Brief Reader" subtitle="The selected brief could not be found"><ReaderState message="This brief is no longer available in the archive." /></AppShell>;
+    return (
+      <AppShell title="Brief Reader" subtitle="The selected brief could not be found">
+        <ReaderState message="This brief is no longer available in the archive." />
+      </AppShell>
+    );
   }
 
   const selectedBrief = toArchiveRow(detail);
   const download = async () => {
     try {
       const bytes = await buildBriefPdf(detail, selectedBrief);
-      const url = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" }));
+      const url = URL.createObjectURL(
+        new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" }),
+      );
       const link = document.createElement("a");
       link.href = url;
       link.download = `${slugify(detail.candidate.company)}-${slugify(detail.candidate.target)}-brief.pdf`;
       link.click();
       URL.revokeObjectURL(url);
-      success({ title: "Brief PDF downloaded", description: "The full analysis framework was exported." });
+      success({
+        title: "Brief PDF downloaded",
+        description: "The full analysis framework was exported.",
+      });
     } catch (error) {
-      info({ title: "Could not create PDF", description: error instanceof Error ? error.message : "The brief export failed." });
+      info({
+        title: "Could not create PDF",
+        description: error instanceof Error ? error.message : "The brief export failed.",
+      });
     }
   };
 
@@ -76,22 +136,35 @@ function BriefReader() {
     const url = window.location.href;
     try {
       await navigator.clipboard.writeText(url);
-      success({ title: "Brief link copied", description: "The dedicated reader link is ready to share." });
+      success({
+        title: "Brief link copied",
+        description: "The dedicated reader link is ready to share.",
+      });
     } catch {
       info({ title: "Share link ready", description: url });
     }
   };
 
   return (
-    <AppShell title="Brief Reader" subtitle="Detailed adoption intelligence and transaction analysis">
+    <AppShell
+      title="Brief Reader"
+      subtitle="Detailed adoption intelligence and transaction analysis"
+    >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link to="/briefs" className="inline-flex items-center gap-2 text-[11px] text-text-secondary hover:text-text-primary">
+          <Link
+            to="/briefs"
+            className="inline-flex items-center gap-2 text-[11px] text-text-secondary hover:text-text-primary"
+          >
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Brief Archive
           </Link>
           <div className="flex flex-wrap items-center gap-2">
-            <ToolbarButton icon={Download} onClick={download}>Download</ToolbarButton>
-            <ToolbarButton icon={Share2} onClick={share}>Share</ToolbarButton>
+            <ToolbarButton icon={Download} onClick={download}>
+              Download
+            </ToolbarButton>
+            <ToolbarButton icon={Share2} onClick={share}>
+              Share
+            </ToolbarButton>
           </div>
         </div>
 
@@ -99,66 +172,407 @@ function BriefReader() {
           <div className="border-b border-hairline-soft px-4 py-4 sm:px-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-3">
-                <CompanyMark letter={selectedBrief.logoLetter} color={selectedBrief.logoColor} size={36} />
+                <CompanyMark
+                  letter={selectedBrief.logoLetter}
+                  color={selectedBrief.logoColor}
+                  size={36}
+                />
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-[18px] font-semibold text-text-primary">{selectedBrief.company} / {selectedBrief.target}</h1>
+                    <h1 className="text-[18px] font-semibold text-text-primary">
+                      {selectedBrief.company} / {selectedBrief.target}
+                    </h1>
                     <StatusBadge status={selectedBrief.status} size="xs" />
-                    <span className="mono rounded border border-lime/25 bg-lime/[0.08] px-2 py-1 text-[10px] text-lime">{selectedBrief.version}</span>
+                    <span className="mono rounded border border-lime/25 bg-lime/[0.08] px-2 py-1 text-[10px] text-lime">
+                      {selectedBrief.version}
+                    </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-text-secondary">
-                    <span>{detail.candidate.dealType}</span><span className="text-text-muted">-</span>
-                    <span>{detail.candidate.sector}</span><span className="text-text-muted">-</span>
-                    <span>{detail.candidate.geography}</span><span className="text-text-muted">-</span>
-                    <span>{detail.brief.status} {detail.candidate.announcementDate}</span>
+                    <span>{detail.candidate.dealType}</span>
+                    <span className="text-text-muted">-</span>
+                    <span>{detail.candidate.sector}</span>
+                    <span className="text-text-muted">-</span>
+                    <span>{detail.candidate.geography}</span>
+                    <span className="text-text-muted">-</span>
+                    <span>
+                      {detail.brief.status} {detail.candidate.announcementDate}
+                    </span>
                   </div>
                 </div>
               </div>
-              <div className="text-right text-[10px] text-text-muted">Updated {new Date(detail.brief.updatedAt).toLocaleString()}</div>
+              <div className="text-right text-[10px] text-text-muted">
+                Updated {new Date(detail.brief.updatedAt).toLocaleString()}
+              </div>
             </div>
           </div>
 
-          <div className="overflow-x-auto border-b border-hairline-soft p-3 xl:hidden">
+          <div className="overflow-x-auto border-b border-hairline-soft p-3">
             <div className="flex min-w-max gap-2">
-              {sections.map((section) => <a key={section} href={`#${sectionId(section)}`} className="rounded-md border border-hairline px-3 py-2 text-[10px] text-text-secondary hover:border-lime/40 hover:text-text-primary">{section}</a>)}
+              {viewTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => selectView(tab.value)}
+                  className={`rounded-md border px-4 py-2 text-[10.5px] transition-colors ${
+                    view === tab.value
+                      ? "border-lime/35 bg-lime/[0.08] text-lime"
+                      : "border-hairline text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="grid gap-0 xl:grid-cols-[190px_minmax(0,1fr)_292px]">
-            <aside className="hidden border-r border-hairline-soft p-3 xl:block">
-              <div className="sticky top-4 space-y-1">
-                <div className="px-3 pb-2 text-[9px] uppercase tracking-[0.18em] text-text-muted">In this brief</div>
-                {sections.map((section) => <a key={section} href={`#${sectionId(section)}`} className="block rounded-md px-3 py-2 text-[10px] leading-4 text-text-secondary hover:bg-surface-hover hover:text-text-primary">{section}</a>)}
+          {view === "brief" ? (
+            <div className="overflow-x-auto border-b border-hairline-soft p-3 xl:hidden">
+              <div className="flex min-w-max gap-2">
+                {sections.map((section) => (
+                  <a
+                    key={section}
+                    href={`#${sectionId(section)}`}
+                    className="rounded-md border border-hairline px-3 py-2 text-[10px] text-text-secondary hover:border-lime/40 hover:text-text-primary"
+                  >
+                    {section}
+                  </a>
+                ))}
               </div>
-            </aside>
-            <main className="min-w-0 border-b border-hairline-soft px-4 py-5 sm:px-6 xl:border-b-0 xl:border-r">
-              <BriefReaderContent detail={detail} />
-            </main>
-            <aside className="space-y-4 p-4 sm:p-5 xl:sticky xl:top-4 xl:self-start">
-              <ReaderFacts title="Transaction Overview" items={detail.transaction} />
-              <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-[12px] font-medium text-text-primary">Sources (All Cited)</div>
-                  <span className="mono text-[10px] text-text-muted">{detail.sources.length}</span>
-                </div>
-                <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
-                  {detail.sources.length ? detail.sources.map((source) => (
-                    <a key={`${source.publisher}-${source.headline}`} href={source.url} target="_blank" rel="noreferrer" className="flex items-start gap-2 text-[10px] text-text-secondary hover:text-text-primary">
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block">{source.publisher}: {source.headline}</span>
-                        <span className="mt-0.5 block text-[9px] text-text-muted">{source.date} · {source.type}</span>
-                      </span>
-                      <ExternalLink className="h-3 w-3 shrink-0 text-text-muted" />
+            </div>
+          ) : null}
+
+          {view === "brief" ? (
+            <div className="grid gap-0 xl:grid-cols-[190px_minmax(0,1fr)_292px]">
+              <aside className="hidden border-r border-hairline-soft p-3 xl:block">
+                <div className="sticky top-4 space-y-1">
+                  <div className="px-3 pb-2 text-[9px] uppercase tracking-[0.18em] text-text-muted">
+                    In this brief
+                  </div>
+                  {sections.map((section) => (
+                    <a
+                      key={section}
+                      href={`#${sectionId(section)}`}
+                      className="block rounded-md px-3 py-2 text-[10px] leading-4 text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                    >
+                      {section}
                     </a>
-                  )) : <ReaderEmpty reason="No cited source records are available for this brief." />}
+                  ))}
                 </div>
-              </div>
-            </aside>
-          </div>
+              </aside>
+              <main className="min-w-0 border-b border-hairline-soft px-4 py-5 sm:px-6 xl:border-b-0 xl:border-r">
+                <BriefReaderContent detail={detail} />
+              </main>
+              <aside className="space-y-4 p-4 sm:p-5 xl:sticky xl:top-4 xl:self-start">
+                <ReaderFacts title="Transaction Overview" items={detail.transaction} />
+                <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[12px] font-medium text-text-primary">
+                      Sources (All Cited)
+                    </div>
+                    <span className="mono text-[10px] text-text-muted">
+                      {detail.sources.length}
+                    </span>
+                  </div>
+                  <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                    {detail.sources.length ? (
+                      detail.sources.map((source) => (
+                        <a
+                          key={`${source.publisher}-${source.headline}`}
+                          href={source.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-start gap-2 text-[10px] text-text-secondary hover:text-text-primary"
+                        >
+                          <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block">
+                              {source.publisher}: {source.headline}
+                            </span>
+                            <span className="mt-0.5 block text-[9px] text-text-muted">
+                              {source.date} · {source.type}
+                            </span>
+                          </span>
+                          <ExternalLink className="h-3 w-3 shrink-0 text-text-muted" />
+                        </a>
+                      ))
+                    ) : (
+                      <ReaderEmpty reason="No cited source records are available for this brief." />
+                    )}
+                  </div>
+                </div>
+              </aside>
+            </div>
+          ) : (
+            <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_322px]">
+              <main className="min-w-0 border-b border-hairline-soft px-4 py-5 sm:px-6 xl:border-b-0 xl:border-r">
+                {view === "thesis-map" ? (
+                  <ThesisMapView
+                    detail={detail}
+                    selectedClaimId={selectedClaimId}
+                    onSelectClaim={selectClaim}
+                  />
+                ) : view === "evidence" ? (
+                  <EvidenceView
+                    detail={detail}
+                    selectedClaimId={selectedClaimId}
+                    onSelectClaim={selectClaim}
+                  />
+                ) : (
+                  <SourcesView detail={detail} />
+                )}
+              </main>
+              <aside className="space-y-4 p-4 sm:p-5 xl:sticky xl:top-4 xl:self-start">
+                <ReaderFacts title="Transaction Overview" items={detail.transaction} />
+                {view === "thesis-map" ? (
+                  <ThesisEvidenceRail
+                    detail={detail}
+                    selectedClaimId={selectedClaimId}
+                    onSelectClaim={selectClaim}
+                  />
+                ) : (
+                  <ReaderSourceSnapshot detail={detail} />
+                )}
+              </aside>
+            </div>
+          )}
         </Panel>
       </div>
     </AppShell>
+  );
+}
+
+function ThesisMapView({
+  detail,
+  selectedClaimId,
+  onSelectClaim,
+}: {
+  detail: ArchiveDetail;
+  selectedClaimId: string | null;
+  onSelectClaim: (claimId: string) => void;
+}) {
+  const thesisMap = detail.brief.thesisMap;
+  if (!thesisMap) {
+    return (
+      <ReaderEmpty reason="Thesis Map unavailable: this brief was generated before the evidence-linked thesis contract was available or the map generation failed." />
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <ReaderSection id="thesis-map-signal" title="Signal" subtitle="What publicly happened">
+        <p>{thesisMap.signal}</p>
+      </ReaderSection>
+      <ReaderSection
+        id="thesis-map-thesis"
+        title="Adopt X Thesis"
+        subtitle="What this signal suggests is becoming true"
+      >
+        <p className="text-[15px] leading-7 text-text-primary">{thesisMap.thesis}</p>
+        <ReaderCard title="Interesting because" detail={thesisMap.interestingBecause} />
+      </ReaderSection>
+      <ReaderSection id="thesis-map-implications" title="Implications">
+        <ReaderPoints items={thesisMap.implications} />
+      </ReaderSection>
+      <ReaderSection id="thesis-map-money" title="Follow the Money">
+        <ReaderPoints items={thesisMap.followTheMoney} />
+      </ReaderSection>
+      <ReaderSection id="thesis-map-invalidation" title="What Would Invalidate This Thesis">
+        <ReaderBullets items={thesisMap.invalidationConditions} />
+      </ReaderSection>
+      <ReaderSection id="thesis-map-counter" title="Counter-thesis">
+        <p>{thesisMap.counterThesis}</p>
+      </ReaderSection>
+      <ReaderSection id="thesis-map-opportunities" title="Opportunities">
+        <ReaderOpportunities
+          items={thesisMap.opportunities}
+          emptyReason="No defensible opportunity identified from the available evidence."
+        />
+      </ReaderSection>
+      <ReaderSection id="thesis-map-confidence" title="Confidence">
+        <ReaderCard
+          title={`${thesisMap.confidence.level} confidence`}
+          detail={`${thesisMap.confidence.rationale} Basis: ${thesisMap.confidence.basis}.`}
+        />
+        <ReaderBullets
+          items={thesisMap.limitations}
+          emptyReason="No material limitations were returned."
+        />
+      </ReaderSection>
+      <ReaderSection
+        id="thesis-map-evidence"
+        title="Evidence Claims"
+        subtitle="Select a claim to focus its supporting sources"
+      >
+        <div className="space-y-3">
+          {thesisMap.evidenceClaims.length ? (
+            thesisMap.evidenceClaims.map((claim) => (
+              <button
+                key={claim.claimId}
+                type="button"
+                onClick={() => onSelectClaim(claim.claimId)}
+                className={`block w-full rounded-lg border p-3 text-left transition-colors ${selectedClaimId === claim.claimId ? "border-lime/45 bg-lime/[0.08]" : "border-hairline-soft bg-surface-2/35 hover:border-lime/30"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="mono text-[10px] text-lime">{claim.claimId}</span>
+                  <span className="text-[10px] text-text-muted">{claim.relation}</span>
+                </div>
+                <p className="mt-1 text-[11px] leading-5 text-text-secondary">{claim.claim}</p>
+              </button>
+            ))
+          ) : (
+            <ReaderEmpty reason="No evidence claims were generated for this Thesis Map." />
+          )}
+        </div>
+      </ReaderSection>
+    </div>
+  );
+}
+
+function EvidenceView({
+  detail,
+  selectedClaimId,
+  onSelectClaim,
+}: {
+  detail: ArchiveDetail;
+  selectedClaimId: string | null;
+  onSelectClaim: (claimId: string) => void;
+}) {
+  return (
+    <div className="space-y-8">
+      <ReaderSection
+        id="evidence-claims"
+        title="Evidence Claims"
+        subtitle="Claims used to support or challenge the thesis"
+      >
+        <div className="space-y-3">
+          {detail.brief.thesisMap?.evidenceClaims.length ? (
+            detail.brief.thesisMap.evidenceClaims.map((claim) => (
+              <button
+                key={claim.claimId}
+                type="button"
+                onClick={() => onSelectClaim(claim.claimId)}
+                className={`block w-full rounded-lg border p-4 text-left ${selectedClaimId === claim.claimId ? "border-lime/45 bg-lime/[0.08]" : "border-hairline-soft bg-surface-2/35"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="mono text-[10px] text-lime">{claim.claimId}</span>
+                  <span className="text-[10px] text-text-muted">{claim.relation}</span>
+                </div>
+                <p className="mt-2 text-[12px] leading-6 text-text-secondary">{claim.claim}</p>
+                <p className="mt-2 text-[10px] text-text-muted">
+                  {claim.sourceExternalIds.length} cited source
+                  {claim.sourceExternalIds.length === 1 ? "" : "s"}
+                </p>
+              </button>
+            ))
+          ) : (
+            <ReaderEmpty reason="No claim-level evidence is available for this brief." />
+          )}
+        </div>
+      </ReaderSection>
+      <ReaderSection id="evidence-notes" title="Evidence Notes">
+        <ReaderBullets
+          items={detail.brief.evidenceUsed}
+          emptyReason="No cited evidence notes are available for this brief."
+        />
+      </ReaderSection>
+    </div>
+  );
+}
+
+function SourcesView({ detail }: { detail: ArchiveDetail }) {
+  return (
+    <div className="space-y-8">
+      <ReaderSection
+        id="sources-all"
+        title="Sources"
+        subtitle="All public sources used to corroborate the brief"
+      >
+        <ReaderSourceList detail={detail} />
+      </ReaderSection>
+    </div>
+  );
+}
+
+function ThesisEvidenceRail({
+  detail,
+  selectedClaimId,
+  onSelectClaim,
+}: {
+  detail: ArchiveDetail;
+  selectedClaimId: string | null;
+  onSelectClaim: (claimId: string) => void;
+}) {
+  const claims = detail.brief.thesisMap?.evidenceClaims ?? [];
+  return (
+    <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4">
+      <div className="text-[12px] font-medium text-text-primary">Evidence Rail</div>
+      <div className="mt-4 space-y-3">
+        {claims.length ? (
+          claims.map((claim) => (
+            <button
+              key={claim.claimId}
+              type="button"
+              onClick={() => onSelectClaim(claim.claimId)}
+              className={`block w-full rounded-lg border p-3 text-left ${selectedClaimId === claim.claimId ? "border-lime/45 bg-lime/[0.08]" : "border-hairline-soft bg-surface-1/35"}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="mono text-[10px] text-lime">{claim.claimId}</span>
+                <span className="text-[9px] text-text-muted">{claim.relation}</span>
+              </div>
+              {claim.sourceExternalIds.map((sourceId) => {
+                const source = detail.sources.find((item) => item.externalId === sourceId);
+                return source ? (
+                  <a
+                    key={sourceId}
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
+                    className="mt-2 block text-[10px] leading-4 text-text-secondary hover:text-lime"
+                  >
+                    {source.publisher}: {source.headline}
+                  </a>
+                ) : (
+                  <span key={sourceId} className="mt-2 block text-[10px] text-text-muted">
+                    Source unavailable: {sourceId}
+                  </span>
+                );
+              })}
+            </button>
+          ))
+        ) : (
+          <ReaderEmpty reason="No source-linked claims were generated for this brief." />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReaderSourceSnapshot({ detail }: { detail: ArchiveDetail }) {
+  return (
+    <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[12px] font-medium text-text-primary">All Cited Sources</div>
+        <span className="mono text-[10px] text-text-muted">{detail.sources.length}</span>
+      </div>
+      <div className="mt-4 space-y-3">
+        {detail.sources.slice(0, 5).map((source) => (
+          <a
+            key={source.externalId}
+            href={source.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-start gap-2 text-[10px] text-text-secondary hover:text-text-primary"
+          >
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
+            <span className="min-w-0 flex-1">
+              {source.publisher}: {source.headline}
+            </span>
+            <ExternalLink className="h-3 w-3 shrink-0 text-text-muted" />
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -166,79 +580,320 @@ function BriefReaderContent({ detail }: { detail: ArchiveDetail }) {
   const analysis = detail.brief.analysis;
   return (
     <div className="space-y-10">
-      <ReaderSection id="Executive Summary" title="Executive Summary" subtitle="Generated from verified candidate evidence"><p>{detail.brief.executiveSummary}</p></ReaderSection>
-      <ReaderSection id="Transaction Overview" title="Transaction Overview" subtitle="What is known about the transaction"><p>{detail.brief.transactionOverview}</p></ReaderSection>
-      <ReaderSection id="Capability Purchased" title="Capability Purchased"><ReaderBullets items={analysis?.capabilityPurchased} emptyReason="No capability could be identified because the available source does not confirm a purchased or transferred AI capability." /></ReaderSection>
-      <ReaderSection id="Build vs Buy" title="Build vs Buy"><p>{analysis?.buildVsBuy ?? fallback()}</p></ReaderSection>
-      <ReaderSection id="Strategic Rationale" title="Strategic Rationale"><p>{detail.brief.strategicRationale}</p><ReaderPoints items={analysis?.strategicRationalePoints} /></ReaderSection>
-      <ReaderSection id="What Changed" title="What Changed"><p>{analysis?.marketChange ?? fallback()}</p></ReaderSection>
-      <ReaderSection id="Value Drivers" title="Value Drivers"><ReaderValueDrivers items={analysis?.valueDrivers} /></ReaderSection>
-      <ReaderSection id="Synergy Map" title="Synergy Map"><div className="grid gap-3 md:grid-cols-3">{analysis?.synergyMap?.length ? analysis.synergyMap.map((item) => <ReaderCard key={item.category} title={item.category} detail={item.items.join(" ")} />) : <ReaderEmpty reason="No synergy map was generated because the available evidence does not identify a confirmed transaction, target capability, or integration plan from which revenue, cost, or strategic synergies could be established." />}</div></ReaderSection>
-      <ReaderSection id="Risks & Mitigations" title="Risks & Mitigations"><div className="space-y-3">{analysis?.riskAnalysis?.length ? analysis.riskAnalysis.map((item) => <ReaderCard key={`${item.category}-${item.title}`} title={`${item.category}: ${item.title}`} detail={`${item.detail} Mitigation: ${item.mitigation}`} />) : <ReaderEmpty reason="No transaction-specific risks or mitigations could be established because the available evidence does not confirm a deal structure, target, or execution plan." />}</div></ReaderSection>
-      <ReaderSection id="Market Signal" title="Market Signal"><p>{analysis?.marketSignal ?? fallback()}</p></ReaderSection>
-      <ReaderSection id="Follow the Money" title="Follow the Money"><ReaderPoints items={analysis?.followTheMoney} emptyReason="No follow-the-money analysis was generated because the available evidence does not disclose transaction value, funding flows, ownership changes, or financial commitments." /></ReaderSection>
-      <ReaderSection id="Second-Order Effects" title="Second-Order Effects"><ReaderPoints items={(analysis?.secondOrderEffects ?? []).map((item) => ({ title: item.question, detail: item.answer }))} emptyReason="No second-order effects were generated because the available evidence does not establish a confirmed transaction or operational change to trace beyond the immediate event." /></ReaderSection>
-      <ReaderSection id="Market Implications" title="Market Implications"><p>{detail.brief.marketImplications}</p></ReaderSection>
-      <ReaderSection id="Key Takeaways" title="Key Takeaways"><ReaderBullets items={detail.brief.keyTakeaways} /></ReaderSection>
-      <ReaderSection id="Startup Opportunities" title="Startup Opportunities"><ReaderOpportunities items={analysis?.startupOpportunities} emptyReason="No defensible startup opportunity was identified from the available evidence; the source does not establish a validated market gap or unmet need." /></ReaderSection>
-      <ReaderSection id="Product Ideas" title="Product Ideas"><ReaderOpportunities items={analysis?.productIdeas} emptyReason="No defensible product idea was identified from the available evidence; the source does not establish a specific workflow problem or buyer demand." /></ReaderSection>
-      <ReaderSection id="Investment Thesis" title="Investment Thesis"><p>{analysis?.investmentThesis ?? fallback()}</p></ReaderSection>
-      <ReaderSection id="Sources & Inputs" title="Sources & Inputs" subtitle="Public sources used to corroborate the brief"><ReaderSourceList detail={detail} /></ReaderSection>
-      <ReaderSection id="Revision History" title="Revision History"><div className="space-y-3">{detail.auditTrail.length ? detail.auditTrail.map((entry, index) => <ReaderCard key={`${entry.when}-${index}`} title={`${entry.actor} ${entry.action}`} detail={`${entry.detail} (${entry.when})`} />) : <p>No revision events recorded.</p>}</div></ReaderSection>
+      <ReaderSection
+        id="Executive Summary"
+        title="Executive Summary"
+        subtitle="Generated from verified candidate evidence"
+      >
+        <p>{detail.brief.executiveSummary}</p>
+      </ReaderSection>
+      <ReaderSection
+        id="Transaction Overview"
+        title="Transaction Overview"
+        subtitle="What is known about the transaction"
+      >
+        <p>{detail.brief.transactionOverview}</p>
+      </ReaderSection>
+      <ReaderSection id="Capability Purchased" title="Capability Purchased">
+        <ReaderBullets
+          items={analysis?.capabilityPurchased}
+          emptyReason="No capability could be identified because the available source does not confirm a purchased or transferred AI capability."
+        />
+      </ReaderSection>
+      <ReaderSection id="Build vs Buy" title="Build vs Buy">
+        <p>{analysis?.buildVsBuy ?? fallback()}</p>
+      </ReaderSection>
+      <ReaderSection id="Strategic Rationale" title="Strategic Rationale">
+        <p>{detail.brief.strategicRationale}</p>
+        <ReaderPoints items={analysis?.strategicRationalePoints} />
+      </ReaderSection>
+      <ReaderSection id="What Changed" title="What Changed">
+        <p>{analysis?.marketChange ?? fallback()}</p>
+      </ReaderSection>
+      <ReaderSection id="Value Drivers" title="Value Drivers">
+        <ReaderValueDrivers items={analysis?.valueDrivers} />
+      </ReaderSection>
+      <ReaderSection id="Synergy Map" title="Synergy Map">
+        <div className="grid gap-3 md:grid-cols-3">
+          {analysis?.synergyMap?.length ? (
+            analysis.synergyMap.map((item) => (
+              <ReaderCard key={item.category} title={item.category} detail={item.items.join(" ")} />
+            ))
+          ) : (
+            <ReaderEmpty reason="No synergy map was generated because the available evidence does not identify a confirmed transaction, target capability, or integration plan from which revenue, cost, or strategic synergies could be established." />
+          )}
+        </div>
+      </ReaderSection>
+      <ReaderSection id="Risks & Mitigations" title="Risks & Mitigations">
+        <div className="space-y-3">
+          {analysis?.riskAnalysis?.length ? (
+            analysis.riskAnalysis.map((item) => (
+              <ReaderCard
+                key={`${item.category}-${item.title}`}
+                title={`${item.category}: ${item.title}`}
+                detail={`${item.detail} Mitigation: ${item.mitigation}`}
+              />
+            ))
+          ) : (
+            <ReaderEmpty reason="No transaction-specific risks or mitigations could be established because the available evidence does not confirm a deal structure, target, or execution plan." />
+          )}
+        </div>
+      </ReaderSection>
+      <ReaderSection id="Market Signal" title="Market Signal">
+        <p>{analysis?.marketSignal ?? fallback()}</p>
+      </ReaderSection>
+      <ReaderSection id="Follow the Money" title="Follow the Money">
+        <ReaderPoints
+          items={analysis?.followTheMoney}
+          emptyReason="No follow-the-money analysis was generated because the available evidence does not disclose transaction value, funding flows, ownership changes, or financial commitments."
+        />
+      </ReaderSection>
+      <ReaderSection id="Second-Order Effects" title="Second-Order Effects">
+        <ReaderPoints
+          items={(analysis?.secondOrderEffects ?? []).map((item) => ({
+            title: item.question,
+            detail: item.answer,
+          }))}
+          emptyReason="No second-order effects were generated because the available evidence does not establish a confirmed transaction or operational change to trace beyond the immediate event."
+        />
+      </ReaderSection>
+      <ReaderSection id="Market Implications" title="Market Implications">
+        <p>{detail.brief.marketImplications}</p>
+      </ReaderSection>
+      <ReaderSection id="Key Takeaways" title="Key Takeaways">
+        <ReaderBullets items={detail.brief.keyTakeaways} />
+      </ReaderSection>
+      <ReaderSection id="Startup Opportunities" title="Startup Opportunities">
+        <ReaderOpportunities
+          items={analysis?.startupOpportunities}
+          emptyReason="No defensible startup opportunity was identified from the available evidence; the source does not establish a validated market gap or unmet need."
+        />
+      </ReaderSection>
+      <ReaderSection id="Product Ideas" title="Product Ideas">
+        <ReaderOpportunities
+          items={analysis?.productIdeas}
+          emptyReason="No defensible product idea was identified from the available evidence; the source does not establish a specific workflow problem or buyer demand."
+        />
+      </ReaderSection>
+      <ReaderSection id="Investment Thesis" title="Investment Thesis">
+        <p>{analysis?.investmentThesis ?? fallback()}</p>
+      </ReaderSection>
+      <ReaderSection
+        id="Sources & Inputs"
+        title="Sources & Inputs"
+        subtitle="Public sources used to corroborate the brief"
+      >
+        <ReaderSourceList detail={detail} />
+      </ReaderSection>
+      <ReaderSection id="Revision History" title="Revision History">
+        <div className="space-y-3">
+          {detail.auditTrail.length ? (
+            detail.auditTrail.map((entry, index) => (
+              <ReaderCard
+                key={`${entry.when}-${index}`}
+                title={`${entry.actor} ${entry.action}`}
+                detail={`${entry.detail} (${entry.when})`}
+              />
+            ))
+          ) : (
+            <p>No revision events recorded.</p>
+          )}
+        </div>
+      </ReaderSection>
     </div>
   );
 }
 
-function ReaderSection({ id, title, subtitle, children }: { id: string; title: string; subtitle?: string; children: ReactNode }) {
-  return <section id={sectionId(id)} className="scroll-mt-6 border-b border-hairline-soft pb-8 last:border-b-0"><h2 className="text-[15px] font-semibold text-text-primary">{title}</h2>{subtitle ? <div className="mt-1 text-[10px] text-text-muted">{subtitle}</div> : null}<div className="mt-4 space-y-4 text-[12px] leading-6 text-text-secondary">{children}</div></section>;
+function ReaderSection({
+  id,
+  title,
+  subtitle,
+  children,
+}: {
+  id: string;
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      id={sectionId(id)}
+      className="scroll-mt-6 border-b border-hairline-soft pb-8 last:border-b-0"
+    >
+      <h2 className="text-[15px] font-semibold text-text-primary">{title}</h2>
+      {subtitle ? <div className="mt-1 text-[10px] text-text-muted">{subtitle}</div> : null}
+      <div className="mt-4 space-y-4 text-[12px] leading-6 text-text-secondary">{children}</div>
+    </section>
+  );
 }
 
-function ReaderBullets({ items, emptyReason }: { items?: string[]; emptyReason?: string }) { return items?.length ? <ul className="space-y-2">{items.map((item) => <li key={item} className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" /><span>{item}</span></li>)}</ul> : <ReaderEmpty reason={emptyReason ?? fallback()} />; }
-function ReaderValueDrivers({ items }: { items?: (string | BriefPoint)[] }) { return items?.length ? <div className="grid gap-3 md:grid-cols-2">{items.map((item, index) => <ReaderCard key={`${typeof item === "string" ? item : item.title}-${index}`} title={typeof item === "string" ? "Value driver" : item.title} detail={typeof item === "string" ? "A specific evidence-backed rationale was not stored for this legacy brief." : item.detail} />)}</div> : <ReaderEmpty reason="No defensible value drivers were identified because the evidence does not establish a confirmed transaction outcome or measurable benefit." />; }
-function ReaderPoints({ items, emptyReason }: { items?: BriefPoint[]; emptyReason?: string }) { return items?.length ? <div className="grid gap-3 md:grid-cols-2">{items.map((item, index) => <ReaderCard key={`${item.title}-${index}`} title={item.title} detail={item.detail} />)}</div> : <ReaderEmpty reason={emptyReason ?? fallback()} />; }
-function ReaderOpportunities({ items, emptyReason }: { items?: BriefOpportunity[]; emptyReason?: string }) { return items?.length ? <div className="grid gap-3 md:grid-cols-2">{items.map((item) => <ReaderCard key={item.title} title={`${item.title} (${item.confidence} confidence)`} detail={item.detail} />)}</div> : <ReaderEmpty reason={emptyReason ?? fallback()} />; }
-function ReaderCard({ title, detail }: { title: string; detail: string }) { return <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-3"><div className="font-medium text-text-primary">{title}</div><div className="mt-1 text-[11px] leading-5 text-text-secondary">{detail}</div></div>; }
-function ReaderEmpty({ reason }: { reason: string }) { return <div className="rounded-lg border border-dashed border-hairline bg-surface-2/25 px-3 py-3 text-[11px] leading-5 text-text-secondary">{reason}</div>; }
+function ReaderBullets({ items, emptyReason }: { items?: string[]; emptyReason?: string }) {
+  return items?.length ? (
+    <ul className="space-y-2">
+      {items.map((item) => (
+        <li key={item} className="flex gap-2">
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <ReaderEmpty reason={emptyReason ?? fallback()} />
+  );
+}
+function ReaderValueDrivers({ items }: { items?: (string | BriefPoint)[] }) {
+  return items?.length ? (
+    <div className="grid gap-3 md:grid-cols-2">
+      {items.map((item, index) => (
+        <ReaderCard
+          key={`${typeof item === "string" ? item : item.title}-${index}`}
+          title={typeof item === "string" ? "Value driver" : item.title}
+          detail={
+            typeof item === "string"
+              ? "A specific evidence-backed rationale was not stored for this legacy brief."
+              : item.detail
+          }
+        />
+      ))}
+    </div>
+  ) : (
+    <ReaderEmpty reason="No defensible value drivers were identified because the evidence does not establish a confirmed transaction outcome or measurable benefit." />
+  );
+}
+function ReaderPoints({ items, emptyReason }: { items?: BriefPoint[]; emptyReason?: string }) {
+  return items?.length ? (
+    <div className="grid gap-3 md:grid-cols-2">
+      {items.map((item, index) => (
+        <ReaderCard key={`${item.title}-${index}`} title={item.title} detail={item.detail} />
+      ))}
+    </div>
+  ) : (
+    <ReaderEmpty reason={emptyReason ?? fallback()} />
+  );
+}
+function ReaderOpportunities({
+  items,
+  emptyReason,
+}: {
+  items?: BriefOpportunity[];
+  emptyReason?: string;
+}) {
+  return items?.length ? (
+    <div className="grid gap-3 md:grid-cols-2">
+      {items.map((item) => (
+        <ReaderCard
+          key={item.title}
+          title={`${item.title} (${item.confidence} confidence)`}
+          detail={item.detail}
+        />
+      ))}
+    </div>
+  ) : (
+    <ReaderEmpty reason={emptyReason ?? fallback()} />
+  );
+}
+function ReaderCard({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-3">
+      <div className="font-medium text-text-primary">{title}</div>
+      <div className="mt-1 text-[11px] leading-5 text-text-secondary">{detail}</div>
+    </div>
+  );
+}
+function ReaderEmpty({ reason }: { reason: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-hairline bg-surface-2/25 px-3 py-3 text-[11px] leading-5 text-text-secondary">
+      {reason}
+    </div>
+  );
+}
 function ReaderSourceList({ detail }: { detail: ArchiveDetail }) {
   if (!detail.sources.length && !detail.brief.evidenceUsed.length) {
-    return <ReaderEmpty reason="No cited source records are available to corroborate this brief." />;
+    return (
+      <ReaderEmpty reason="No cited source records are available to corroborate this brief." />
+    );
   }
 
   return (
     <div className="space-y-4">
-      {detail.sources.length ? detail.sources.map((source) => (
-        <a key={`${source.publisher}-${source.headline}-${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="block rounded-lg border border-hairline-soft bg-surface-2/35 p-3 transition-colors hover:border-lime/35 hover:bg-surface-hover">
-          <div className="flex items-start gap-2">
-            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-            <div className="min-w-0 flex-1">
-              <div className="font-medium text-text-primary">{source.headline}</div>
-              <div className="mt-1 text-[10px] text-text-secondary">{source.publisher} · {source.date} · {source.type}</div>
-              <div className="mt-2 break-all text-[10px] leading-5 text-lime/80">{source.url}</div>
-            </div>
-            <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" />
-          </div>
-        </a>
-      )) : null}
+      {detail.sources.length
+        ? detail.sources.map((source) => (
+            <a
+              key={`${source.publisher}-${source.headline}-${source.url}`}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block rounded-lg border border-hairline-soft bg-surface-2/35 p-3 transition-colors hover:border-lime/35 hover:bg-surface-hover"
+            >
+              <div className="flex items-start gap-2">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-text-primary">{source.headline}</div>
+                  <div className="mt-1 text-[10px] text-text-secondary">
+                    {source.publisher} · {source.date} · {source.type}
+                  </div>
+                  <div className="mt-2 break-all text-[10px] leading-5 text-lime/80">
+                    {source.url}
+                  </div>
+                </div>
+                <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" />
+              </div>
+            </a>
+          ))
+        : null}
       {detail.brief.evidenceUsed.length ? (
         <div>
-          <div className="mb-3 text-[11px] font-medium text-text-primary">Evidence notes used in the analysis</div>
+          <div className="mb-3 text-[11px] font-medium text-text-primary">
+            Evidence notes used in the analysis
+          </div>
           <div className="space-y-3">
             {detail.brief.evidenceUsed.map((note, index) => {
-              const source = detail.sources.find((item) => note.includes(item.url) || note.includes(item.headline));
+              const source = detail.sources.find(
+                (item) => note.includes(item.url) || note.includes(item.headline),
+              );
               const href = source?.url ?? (/^https?:\/\//i.test(note.trim()) ? note.trim() : null);
               const content = (
                 <div className="flex items-start gap-2">
                   <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-text-primary">{source?.headline ?? "Cited evidence note"}</div>
-                    {source ? <div className="mt-1 text-[10px] text-text-secondary">{source.publisher} · {source.date} · {source.type}</div> : null}
-                    <div className={`mt-2 break-all text-[10px] leading-5 ${href ? "text-lime/80" : "text-text-secondary"}`}>{note}</div>
+                    <div className="font-medium text-text-primary">
+                      {source?.headline ?? "Cited evidence note"}
+                    </div>
+                    {source ? (
+                      <div className="mt-1 text-[10px] text-text-secondary">
+                        {source.publisher} · {source.date} · {source.type}
+                      </div>
+                    ) : null}
+                    <div
+                      className={`mt-2 break-all text-[10px] leading-5 ${href ? "text-lime/80" : "text-text-secondary"}`}
+                    >
+                      {note}
+                    </div>
                   </div>
-                  {href ? <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" /> : null}
+                  {href ? (
+                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" />
+                  ) : null}
                 </div>
               );
 
-              return href ? <a key={`${note}-${index}`} href={href} target="_blank" rel="noreferrer" className="block rounded-lg border border-hairline-soft bg-surface-2/35 p-3 transition-colors hover:border-lime/35 hover:bg-surface-hover">{content}</a> : <div key={`${note}-${index}`} className="rounded-lg border border-hairline-soft bg-surface-2/35 p-3">{content}</div>;
+              return href ? (
+                <a
+                  key={`${note}-${index}`}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-lg border border-hairline-soft bg-surface-2/35 p-3 transition-colors hover:border-lime/35 hover:bg-surface-hover"
+                >
+                  {content}
+                </a>
+              ) : (
+                <div
+                  key={`${note}-${index}`}
+                  className="rounded-lg border border-hairline-soft bg-surface-2/35 p-3"
+                >
+                  {content}
+                </div>
+              );
             })}
           </div>
         </div>
@@ -246,8 +901,54 @@ function ReaderSourceList({ detail }: { detail: ArchiveDetail }) {
     </div>
   );
 }
-function ReaderFacts({ title, items }: { title: string; items: { label: string; value: string }[] }) { return <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4"><div className="text-[12px] font-medium text-text-primary">{title}</div><div className="mt-4 space-y-2.5">{items.map((item) => <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 text-[10.5px]"><div className="text-text-secondary">{item.label}</div><div className="text-text-primary">{item.value}</div></div>)}</div></div>; }
-function ReaderState({ message }: { message: string }) { return <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-12 text-center text-[12px] text-text-secondary">{message}</div>; }
-function fallback() { return "No defensible conclusion identified from the available evidence."; }
-function sectionId(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
-function toArchiveRow(detail: ArchiveDetail): ArchiveRow { return { id: detail.id, company: detail.candidate.company, target: detail.candidate.target, logoLetter: detail.candidate.company.charAt(0).toUpperCase() || "A", logoColor: "#26C6B9", sector: detail.candidate.sector, geography: detail.candidate.geography, approvedDate: detail.candidate.announcementDate, approvedTime: "", dealType: detail.candidate.dealType, takeaway: detail.brief.keyTakeaways[0] ?? "", version: detail.brief.version, status: detail.brief.status === "Approved" ? "Approved" : "Generated" }; }
+function ReaderFacts({
+  title,
+  items,
+}: {
+  title: string;
+  items: { label: string; value: string }[];
+}) {
+  return (
+    <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-4">
+      <div className="text-[12px] font-medium text-text-primary">{title}</div>
+      <div className="mt-4 space-y-2.5">
+        {items.map((item) => (
+          <div key={item.label} className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 text-[10.5px]">
+            <div className="text-text-secondary">{item.label}</div>
+            <div className="text-text-primary">{item.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function ReaderState({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-hairline-soft bg-surface-2/35 p-12 text-center text-[12px] text-text-secondary">
+      {message}
+    </div>
+  );
+}
+function fallback() {
+  return "No defensible conclusion identified from the available evidence.";
+}
+function sectionId(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+function toArchiveRow(detail: ArchiveDetail): ArchiveRow {
+  return {
+    id: detail.id,
+    company: detail.candidate.company,
+    target: detail.candidate.target,
+    logoLetter: detail.candidate.company.charAt(0).toUpperCase() || "A",
+    logoColor: "#26C6B9",
+    sector: detail.candidate.sector,
+    geography: detail.candidate.geography,
+    approvedDate: detail.candidate.announcementDate,
+    approvedTime: "",
+    dealType: detail.candidate.dealType,
+    takeaway: detail.brief.keyTakeaways[0] ?? "",
+    version: detail.brief.version,
+    status: detail.brief.status === "Approved" ? "Approved" : "Generated",
+  };
+}

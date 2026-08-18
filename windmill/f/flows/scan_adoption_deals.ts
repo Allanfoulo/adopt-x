@@ -22,6 +22,28 @@ type CandidateDraft = {
   geography: string;
   aiRole: string;
   reasoningSummary: string;
+  preReviewAssessment?: {
+    signal: string;
+    interestingBecause: string;
+    preliminaryThesis: string;
+    counterThesis: string;
+    evidenceRefs: {
+      claimId: string;
+      claim: string;
+      relation: "supports" | "contradicts";
+      sourceExternalIds: string[];
+    }[];
+    missingEvidence: string[];
+    confidenceRationale: string;
+  };
+};
+
+type CorroborationEvidence = {
+  externalId: string;
+  title: string;
+  url: string;
+  description: string;
+  markdown: string;
 };
 
 type PreparedSource = Source & {
@@ -31,6 +53,7 @@ type PreparedSource = Source & {
     completed: boolean;
     resultCount: number;
     independentPublisherCount: number;
+    evidence: CorroborationEvidence[];
   };
 };
 
@@ -152,6 +175,7 @@ function hasSuccessfulFirecrawl(value: unknown): boolean {
 
 function summarizeFirecrawl(value: unknown) {
   const urls = new Set<string>();
+  const evidenceByUrl = new Map<string, CorroborationEvidence>();
   let resultCount = 0;
   let completed = false;
 
@@ -177,10 +201,22 @@ function summarizeFirecrawl(value: unknown) {
         resultCount += evidence.length;
         for (const item of evidence) {
           if (!item || typeof item !== "object") continue;
-          const url = (item as Record<string, unknown>).url;
-          if (typeof url !== "string") continue;
+          const itemRecord = item as Record<string, unknown>;
+          const url = itemRecord.url;
+          const title = itemRecord.title;
+          if (typeof url !== "string" || typeof title !== "string") continue;
           try {
             urls.add(new URL(url).hostname.toLowerCase());
+            evidenceByUrl.set(url, {
+              externalId:
+                typeof itemRecord.externalId === "string"
+                  ? itemRecord.externalId
+                  : `firecrawl:${url}`,
+              title,
+              url,
+              description: typeof itemRecord.description === "string" ? itemRecord.description : "",
+              markdown: typeof itemRecord.markdown === "string" ? itemRecord.markdown : "",
+            });
           } catch {
             // Ignore malformed evidence URLs; the tool schema rejects them upstream.
           }
@@ -195,6 +231,7 @@ function summarizeFirecrawl(value: unknown) {
     completed,
     resultCount,
     independentPublisherCount: urls.size,
+    evidence: Array.from(evidenceByUrl.values()).slice(0, 10),
   };
 }
 
@@ -220,6 +257,51 @@ function parseCandidateDraft(value: unknown): CandidateDraft | null {
     geography: String(record.geography),
     aiRole: String(record.aiRole),
     reasoningSummary: String(record.reasoningSummary),
+    preReviewAssessment: parsePreReviewAssessment(record.preReviewAssessment),
+  };
+}
+
+function parsePreReviewAssessment(value: unknown): CandidateDraft["preReviewAssessment"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const strings = [
+    "signal",
+    "interestingBecause",
+    "preliminaryThesis",
+    "counterThesis",
+    "confidenceRationale",
+  ];
+  if (strings.some((field) => typeof record[field] !== "string")) return undefined;
+  if (!Array.isArray(record.evidenceRefs) || !Array.isArray(record.missingEvidence))
+    return undefined;
+  const evidenceRefs = record.evidenceRefs
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .filter(
+      (item) =>
+        typeof item.claimId === "string" &&
+        typeof item.claim === "string" &&
+        (item.relation === "supports" || item.relation === "contradicts") &&
+        Array.isArray(item.sourceExternalIds) &&
+        item.sourceExternalIds.every((sourceId) => typeof sourceId === "string"),
+    )
+    .map((item) => ({
+      claimId: String(item.claimId),
+      claim: String(item.claim),
+      relation: item.relation as "supports" | "contradicts",
+      sourceExternalIds: (item.sourceExternalIds as unknown[]).map(String),
+    }));
+  const missingEvidence = record.missingEvidence.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
+  if (evidenceRefs.length === 0 || missingEvidence.length === 0) return undefined;
+  return {
+    signal: String(record.signal),
+    interestingBecause: String(record.interestingBecause),
+    preliminaryThesis: String(record.preliminaryThesis),
+    counterThesis: String(record.counterThesis),
+    evidenceRefs,
+    missingEvidence,
+    confidenceRationale: String(record.confidenceRationale),
   };
 }
 

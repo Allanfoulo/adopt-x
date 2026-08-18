@@ -11,6 +11,40 @@ import {
 import { formatDateLabel, getDemoWorkspaceId, titleCase, WORKSPACE_SLUG } from "./model";
 
 const analysisPointValidator = v.object({ title: v.string(), detail: v.string() });
+const evidenceReferenceValidator = v.object({
+  claimId: v.string(),
+  claim: v.string(),
+  relation: v.union(v.literal("supports"), v.literal("contradicts")),
+  sourceExternalIds: v.array(v.string()),
+});
+const thesisMapValidator = v.object({
+  signal: v.string(),
+  surfaceInterpretation: v.string(),
+  interestingBecause: v.string(),
+  thesis: v.string(),
+  evidenceClaims: v.array(evidenceReferenceValidator),
+  implications: v.array(analysisPointValidator),
+  followTheMoney: v.array(analysisPointValidator),
+  invalidationConditions: v.array(v.string()),
+  counterThesis: v.string(),
+  opportunities: v.array(
+    v.object({
+      title: v.string(),
+      detail: v.string(),
+      confidence: v.union(v.literal("High"), v.literal("Medium"), v.literal("Low")),
+    }),
+  ),
+  confidence: v.object({
+    level: v.union(v.literal("High"), v.literal("Medium"), v.literal("Low")),
+    rationale: v.string(),
+    basis: v.union(
+      v.literal("candidate_confidence_score"),
+      v.literal("evidence_coverage"),
+      v.literal("mixed"),
+    ),
+  }),
+  limitations: v.array(v.string()),
+});
 const analysisValidator = v.object({
   capabilityPurchased: v.array(v.string()),
   buildVsBuy: v.string(),
@@ -18,12 +52,23 @@ const analysisValidator = v.object({
   valueDrivers: v.array(v.union(v.string(), analysisPointValidator)),
   strategicRationalePoints: v.array(analysisPointValidator),
   synergyMap: v.array(v.object({ category: v.string(), items: v.array(v.string()) })),
-  riskAnalysis: v.array(v.object({ category: v.string(), title: v.string(), detail: v.string(), mitigation: v.string() })),
+  riskAnalysis: v.array(
+    v.object({
+      category: v.string(),
+      title: v.string(),
+      detail: v.string(),
+      mitigation: v.string(),
+    }),
+  ),
   marketSignal: v.string(),
   followTheMoney: v.array(analysisPointValidator),
   secondOrderEffects: v.array(v.object({ question: v.string(), answer: v.string() })),
-  startupOpportunities: v.array(v.object({ title: v.string(), detail: v.string(), confidence: v.string() })),
-  productIdeas: v.array(v.object({ title: v.string(), detail: v.string(), confidence: v.string() })),
+  startupOpportunities: v.array(
+    v.object({ title: v.string(), detail: v.string(), confidence: v.string() }),
+  ),
+  productIdeas: v.array(
+    v.object({ title: v.string(), detail: v.string(), confidence: v.string() }),
+  ),
   investmentThesis: v.string(),
 });
 
@@ -38,6 +83,7 @@ const briefEnrichmentValidator = v.object({
   confidenceScore: v.number(),
   evidenceUsed: v.array(v.string()),
   last30daysUsed: v.boolean(),
+  thesisMap: thesisMapValidator,
   analysis: analysisValidator,
 });
 
@@ -45,7 +91,8 @@ export const queue = mutation({
   args: { externalIds: v.array(v.string()) },
   handler: async (ctx, args) => {
     if (args.externalIds.length === 0) throw new Error("Select at least one candidate");
-    if (args.externalIds.length > 50) throw new Error("A brief run may contain at most 50 candidates");
+    if (args.externalIds.length > 50)
+      throw new Error("A brief run may contain at most 50 candidates");
 
     const workspace = await getWorkspace(ctx);
     const now = Date.now();
@@ -71,11 +118,9 @@ export const queue = mutation({
         createdAt: now,
       });
       await ctx.db.patch(candidate._id, { status: "brief_queued", updatedAt: now });
-      await ctx.scheduler.runAfter(
-        queued.length * 250,
-        internal.briefs.generateCandidate,
-        { briefRunId },
-      );
+      await ctx.scheduler.runAfter(queued.length * 250, internal.briefs.generateCandidate, {
+        briefRunId,
+      });
       queued.push(externalId);
     }
 
@@ -106,13 +151,14 @@ export const getRuns = query({
       const completed = batch.filter((row) => row.status === "completed").length;
       const failed = batch.filter((row) => row.status === "failed").length;
       const running = batch.some((row) => row.status === "running");
-      const status = failed > 0 && completed + failed === batch.length
-        ? "Partial Failed"
-        : completed === batch.length
-          ? "Completed"
-          : running
-            ? "Running"
-            : "Queued";
+      const status =
+        failed > 0 && completed + failed === batch.length
+          ? "Partial Failed"
+          : completed === batch.length
+            ? "Completed"
+            : running
+              ? "Running"
+              : "Queued";
       return {
         id,
         status,
@@ -145,13 +191,14 @@ export const getRunDetails = query({
     const completed = rows.filter((row) => row.status === "completed").length;
     const failed = rows.filter((row) => row.status === "failed").length;
     const running = rows.some((row) => row.status === "running");
-    const status = failed > 0 && completed + failed === rows.length
-      ? "Partial Failed"
-      : completed === rows.length
-        ? "Completed"
-        : running
-          ? "Running"
-          : "Queued";
+    const status =
+      failed > 0 && completed + failed === rows.length
+        ? "Partial Failed"
+        : completed === rows.length
+          ? "Completed"
+          : running
+            ? "Running"
+            : "Queued";
     const items = [];
     for (const row of rows) {
       const candidate = await ctx.db.get(row.candidateId);
@@ -285,6 +332,7 @@ export const getArchiveDetail = query({
         confidenceScore: brief.confidenceScore ?? null,
         last30daysUsed: brief.last30daysUsed ?? false,
         analysis: brief.analysis ?? null,
+        thesisMap: brief.thesisMap ?? null,
         version: `v${brief.version}`,
         status: titleCase(brief.status),
         updatedAt: brief.updatedAt,
@@ -306,13 +354,24 @@ export const getArchiveDetail = query({
         { label: "Enterprise Value", value: "Not available" },
         { label: "Employees", value: "Not available" },
       ],
-      sources: sources.map((source) => ({
-        headline: source.headline,
-        publisher: source.publisher,
-        date: formatDateLabel(source.publishedAt),
-        type: titleCase(source.sourceType),
-        url: source.url,
-      })),
+      sources: sources.flatMap((source) => [
+        {
+          externalId: source.externalId,
+          headline: source.headline,
+          publisher: source.publisher,
+          date: formatDateLabel(source.publishedAt),
+          type: titleCase(source.sourceType),
+          url: source.url,
+        },
+        ...(source.corroboration?.evidence ?? []).map((evidence) => ({
+          externalId: evidence.externalId,
+          headline: evidence.title,
+          publisher: "Firecrawl",
+          date: "Cited during scan",
+          type: "Corroboration",
+          url: evidence.url,
+        })),
+      ]),
       auditTrail: auditEvents.map((event) => {
         const actor = event.actorUserId ? usersById.get(event.actorUserId) : null;
         return {
@@ -325,7 +384,12 @@ export const getArchiveDetail = query({
         };
       }),
       metadata: [
-        { label: "Owner", value: brief.ownerUserId ? usersById.get(brief.ownerUserId)?.displayName ?? "Not available" : "System" },
+        {
+          label: "Owner",
+          value: brief.ownerUserId
+            ? (usersById.get(brief.ownerUserId)?.displayName ?? "Not available")
+            : "System",
+        },
         { label: "Team", value: "Not available" },
         { label: "Tags", value: `${titleCase(candidate.sector)}, ${titleCase(candidate.aiRole)}` },
         { label: "Visibility", value: "Internal" },
@@ -373,6 +437,15 @@ export const completeCandidate = internalMutation({
     const sources = (await Promise.all(links.map((link) => ctx.db.get(link.sourceHitId)))).filter(
       (source): source is Doc<"sourceHits"> => source !== null,
     );
+    assertThesisMapSources(
+      args.enrichment.thesisMap,
+      new Set(
+        sources.flatMap((source) => [
+          source.externalId,
+          ...(source.corroboration?.evidence ?? []).map((evidence) => evidence.externalId),
+        ]),
+      ),
+    );
     const existing = await ctx.db
       .query("dealBriefs")
       .withIndex("by_workspaceId_and_candidateId", (q) =>
@@ -388,8 +461,7 @@ export const completeCandidate = internalMutation({
       externalId: `${run.externalRunId}:${candidate.externalId}`,
       version,
       status: "generated",
-      executiveSummary:
-        args.enrichment.executiveSummary,
+      executiveSummary: args.enrichment.executiveSummary,
       transactionOverview: args.enrichment.transactionOverview,
       strategicRationale: args.enrichment.strategicRationale,
       risks: args.enrichment.risks,
@@ -401,6 +473,7 @@ export const completeCandidate = internalMutation({
       confidenceScore: args.enrichment.confidenceScore,
       last30daysUsed: args.enrichment.last30daysUsed,
       analysis: args.enrichment.analysis,
+      thesisMap: args.enrichment.thesisMap,
       createdAt: now,
       updatedAt: now,
     });
@@ -441,8 +514,10 @@ export const getBriefRunForEnrichment = internalQuery({
         confidenceScore: candidate.confidenceScore,
         thesisFitScore: candidate.thesisFitScore,
         sourceConfidence: candidate.sourceConfidence,
+        preReviewAssessment: candidate.preReviewAssessment ?? null,
       },
       sources: sources.map((source) => ({
+        externalId: source.externalId,
         publisher: source.publisher,
         sourceType: source.sourceType,
         sourceClass: source.sourceClass,
@@ -450,6 +525,7 @@ export const getBriefRunForEnrichment = internalQuery({
         headline: source.headline,
         publishedAt: source.publishedAt,
         rawExcerpt: source.rawExcerpt,
+        corroborationEvidence: source.corroboration?.evidence ?? [],
       })),
     };
   },
@@ -487,8 +563,10 @@ type BriefEnrichmentInput = {
     confidenceScore: number;
     thesisFitScore: number;
     sourceConfidence: number;
+    preReviewAssessment: Doc<"dealCandidates">["preReviewAssessment"] | null;
   };
   sources: {
+    externalId: string;
     publisher: string;
     sourceType: string;
     sourceClass: string;
@@ -496,6 +574,13 @@ type BriefEnrichmentInput = {
     headline: string;
     publishedAt: number;
     rawExcerpt: string;
+    corroborationEvidence: {
+      externalId: string;
+      title: string;
+      url: string;
+      description: string;
+      markdown: string;
+    }[];
   }[];
 };
 
@@ -515,6 +600,30 @@ type BriefAnalysis = {
   investmentThesis: string;
 };
 
+type ThesisMap = {
+  signal: string;
+  surfaceInterpretation: string;
+  interestingBecause: string;
+  thesis: string;
+  evidenceClaims: {
+    claimId: string;
+    claim: string;
+    relation: "supports" | "contradicts";
+    sourceExternalIds: string[];
+  }[];
+  implications: { title: string; detail: string }[];
+  followTheMoney: { title: string; detail: string }[];
+  invalidationConditions: string[];
+  counterThesis: string;
+  opportunities: { title: string; detail: string; confidence: "High" | "Medium" | "Low" }[];
+  confidence: {
+    level: "High" | "Medium" | "Low";
+    rationale: string;
+    basis: "candidate_confidence_score" | "evidence_coverage" | "mixed";
+  };
+  limitations: string[];
+};
+
 async function generateBriefEnrichment(input: BriefEnrichmentInput) {
   const baseUrl = process.env.APP_GATEWAY_URL?.replace(/\/$/, "");
   if (!baseUrl) {
@@ -528,7 +637,9 @@ async function generateBriefEnrichment(input: BriefEnrichmentInput) {
   });
   const responseText = await response.text();
   if (!response.ok) {
-    throw new Error(`Mastra brief enrichment failed (${response.status}): ${responseText.slice(0, 500)}`);
+    throw new Error(
+      `Mastra brief enrichment failed (${response.status}): ${responseText.slice(0, 500)}`,
+    );
   }
 
   let body: { value?: unknown; toolResults?: unknown[] };
@@ -551,12 +662,17 @@ async function generateBriefEnrichment(input: BriefEnrichmentInput) {
 function validateBriefEnrichment(value: Record<string, unknown>) {
   const text = (key: string) => {
     const result = value[key];
-    if (typeof result !== "string" || !result.trim()) throw new Error(`Mastra enrichment missing ${key}.`);
+    if (typeof result !== "string" || !result.trim())
+      throw new Error(`Mastra enrichment missing ${key}.`);
     return result.trim();
   };
   const list = (key: string, min: number) => {
     const result = value[key];
-    if (!Array.isArray(result) || result.length < min || result.some((item) => typeof item !== "string" || !item.trim())) {
+    if (
+      !Array.isArray(result) ||
+      result.length < min ||
+      result.some((item) => typeof item !== "string" || !item.trim())
+    ) {
       throw new Error(`Mastra enrichment returned an invalid ${key} list.`);
     }
     return result.map((item) => String(item).trim());
@@ -565,10 +681,12 @@ function validateBriefEnrichment(value: Record<string, unknown>) {
   if (typeof confidenceScore !== "number" || confidenceScore < 0 || confidenceScore > 100) {
     throw new Error("Mastra enrichment returned an invalid confidenceScore.");
   }
-  if (typeof value.last30daysUsed !== "boolean") throw new Error("Mastra enrichment missing last30daysUsed.");
+  if (typeof value.last30daysUsed !== "boolean")
+    throw new Error("Mastra enrichment missing last30daysUsed.");
   if (!value.analysis || typeof value.analysis !== "object" || Array.isArray(value.analysis)) {
     throw new Error("Mastra enrichment missing analysis sections.");
   }
+  const thesisMap = value.thesisMap;
   return {
     executiveSummary: text("executiveSummary"),
     transactionOverview: text("transactionOverview"),
@@ -580,11 +698,75 @@ function validateBriefEnrichment(value: Record<string, unknown>) {
     confidenceScore,
     evidenceUsed: list("evidenceUsed", 1),
     last30daysUsed: value.last30daysUsed,
+    thesisMap:
+      thesisMap && typeof thesisMap === "object" && !Array.isArray(thesisMap)
+        ? (thesisMap as ThesisMap)
+        : unavailableThesisMap(),
     analysis: value.analysis as BriefAnalysis,
+  };
+}
+
+function unavailableThesisMap(): ThesisMap {
+  return {
+    signal: "Thesis Map unavailable",
+    surfaceInterpretation: "The available enrichment did not provide a defensible thesis map.",
+    interestingBecause:
+      "The evidence may still indicate a relevant adoption signal, but the available record is insufficient for structured thesis analysis.",
+    thesis: "No defensible conclusion identified from the available evidence.",
+    evidenceClaims: [],
+    implications: [
+      {
+        title: "Evidence gap",
+        detail: "Additional independent sources are required before implications can be assessed.",
+      },
+    ],
+    followTheMoney: [
+      {
+        title: "No defensible value-flow conclusion",
+        detail:
+          "The available evidence does not establish who captures economic value or how it moves.",
+      },
+    ],
+    invalidationConditions: [
+      "A defensible thesis requires corroborating evidence from independent sources and clearer transaction facts.",
+    ],
+    counterThesis:
+      "The observed item may be commentary or an early signal rather than evidence of a completed adoption event.",
+    opportunities: [
+      {
+        title: "No defensible opportunity identified",
+        detail:
+          "The available evidence does not support a specific startup, product, or investment opportunity.",
+        confidence: "Low",
+      },
+    ],
+    confidence: {
+      level: "Low",
+      rationale:
+        "The enrichment response did not contain enough structured evidence to support a thesis map.",
+      basis: "evidence_coverage",
+    },
+    limitations: [
+      "The Thesis Map was unavailable in the enrichment response.",
+      "No conclusion should be treated as decision-ready until the evidence gap is resolved.",
+    ],
   };
 }
 
 function getLogoColor(sector: string): string {
   const colors = ["#B7F137", "#4D9DFF", "#2DD4BF", "#A879FF", "#FFB020"];
   return colors[sector.length % colors.length];
+}
+
+function assertThesisMapSources(thesisMap: ThesisMap, allowedSourceExternalIds: Set<string>) {
+  for (const claim of thesisMap.evidenceClaims) {
+    for (const sourceExternalId of claim.sourceExternalIds) {
+      if (!allowedSourceExternalIds.has(sourceExternalId)) {
+        throw new Error(`Thesis Map claim ${claim.claimId} references an unknown source.`);
+      }
+    }
+    if (claim.relation === "supports" && claim.sourceExternalIds.length === 0) {
+      throw new Error(`Thesis Map claim ${claim.claimId} has no supporting source.`);
+    }
+  }
 }

@@ -40,7 +40,10 @@ const extractCandidate = createStep({
     if (!inputData) throw new Error("Scan input not found");
     const sourceText = inputData.sources
       .slice(0, 12)
-      .map((source) => `${source.publisher}: ${source.headline}\n${source.rawExcerpt}`)
+      .map(
+        (source) =>
+          `SOURCE EXTERNAL ID: ${source.externalId}\n${source.publisher}: ${source.headline}\n${source.rawExcerpt}`,
+      )
       .join("\n\n");
 
     const response = await adoptionAgent.generate(

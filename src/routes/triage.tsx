@@ -71,6 +71,16 @@ type TriageTab = {
   count: number;
 };
 
+type TriageFilterKey =
+  "sector" | "geography" | "dealType" | "status" | "sourceClass" | "scorePreset";
+
+type TriageFilters = Record<TriageFilterKey, string>;
+
+type FilterOption = {
+  label: string;
+  value: string;
+};
+
 type SummaryRunCardData = {
   label: string;
   status: string;
@@ -146,14 +156,39 @@ type TriageQueue = {
     activity: OperationalActivity[];
   };
   auditTrail: AuditTrailEntry[];
-  pagination: { showingStart: number; showingEnd: number; total: number };
+  pagination: {
+    showingStart: number;
+    showingEnd: number;
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
 };
 
-const getTriageQueue: FunctionReference<"query", "public", { limit?: number }, TriageQueue> =
-  makeFunctionReference("triage:getQueue");
+const getTriageQueue: FunctionReference<
+  "query",
+  "public",
+  {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sector?: string;
+    geography?: string;
+    dealType?: string;
+    status?: string;
+    sourceClass?: string;
+    scorePreset?: string;
+  },
+  TriageQueue
+> = makeFunctionReference("triage:getQueue");
 
-const startScanReference: FunctionReference<"action", "public", {}, { jobId: string | null }> =
-  makeFunctionReference("scans:start");
+const startScanReference: FunctionReference<
+  "action",
+  "public",
+  Record<string, never>,
+  { jobId: string | null }
+> = makeFunctionReference("scans:start");
 
 type QueueBriefsResult = { runId: string; queued: number };
 
@@ -164,12 +199,8 @@ const queueBriefsReference: FunctionReference<
   QueueBriefsResult
 > = makeFunctionReference("briefs:queue");
 
-const getBriefRunsReference: FunctionReference<
-  "query",
-  "public",
-  { limit?: number },
-  RunRow[]
-> = makeFunctionReference("briefs:getRuns");
+const getBriefRunsReference: FunctionReference<"query", "public", { limit?: number }, RunRow[]> =
+  makeFunctionReference("briefs:getRuns");
 
 const getBriefRunDetailsReference: FunctionReference<
   "query",
@@ -346,12 +377,58 @@ const fallbackTriageRows: TriageRow[] = [
   },
 ];
 
-const desktopFilters = [
-  "All Sectors",
-  "All Geos",
-  "All Deal Types",
-  "All Statuses",
-  "All Source Classes",
+const sectorOptions: FilterOption[] = [
+  { label: "All Sectors", value: "" },
+  { label: "Fintech", value: "fintech" },
+  { label: "Healthcare", value: "healthcare" },
+  { label: "Insurance", value: "insurance" },
+  { label: "Legal", value: "legal" },
+  { label: "Industrial", value: "industrial" },
+  { label: "Logistics", value: "logistics" },
+  { label: "Education", value: "education" },
+  { label: "Other", value: "other" },
+];
+
+const geographyOptions: FilterOption[] = [
+  { label: "All Geos", value: "" },
+  { label: "Global / Unknown", value: "global / unknown" },
+  { label: "US", value: "us" },
+  { label: "UK", value: "uk" },
+  { label: "Australia", value: "australia" },
+  { label: "South Africa / Australia", value: "south africa / australia" },
+  { label: "Europe", value: "europe" },
+];
+
+const dealTypeOptions: FilterOption[] = [
+  { label: "All Deal Types", value: "" },
+  { label: "Acquisition", value: "acquisition" },
+  { label: "Strategic Partnership", value: "strategic_partnership" },
+  { label: "Strategic Investment", value: "strategic_investment" },
+  { label: "Product Launch", value: "product_launch" },
+];
+
+const statusOptions: FilterOption[] = [
+  { label: "All Statuses", value: "" },
+  { label: "Pending Review", value: "pending_review" },
+  { label: "Brief Queued", value: "brief_queued" },
+  { label: "Brief Ready", value: "brief_ready" },
+  { label: "Approved", value: "approved" },
+  { label: "Rejected", value: "rejected" },
+  { label: "Brief Failed", value: "brief_failed" },
+];
+
+const sourceClassOptions: FilterOption[] = [
+  { label: "All Source Classes", value: "" },
+  { label: "Primary Structured", value: "primary_structured" },
+  { label: "Secondary Signal", value: "secondary_signal" },
+  { label: "Community", value: "community" },
+];
+
+const scorePresetOptions: FilterOption[] = [
+  { label: "More", value: "" },
+  { label: "Confidence 70+", value: "confidence_70" },
+  { label: "Thesis Fit 70+", value: "thesis_70" },
+  { label: "Source Confidence 70+", value: "source_70" },
 ];
 
 const fallbackSummaryCards: SummaryRunCardData[] = [
@@ -455,7 +532,7 @@ const queueSummaryColors: Record<string, string> = {
 };
 
 function buildTriageView(queue: TriageQueue | undefined) {
-  if (!queue || queue.rows.length === 0) {
+  if (!queue) {
     return {
       tabs: fallbackTabCounts,
       rows: fallbackTriageRows,
@@ -463,7 +540,14 @@ function buildTriageView(queue: TriageQueue | undefined) {
       queueSummary: fallbackQueueSummary,
       operationalRuns: fallbackOperationalRuns,
       auditTrail: fallbackAuditTrail,
-      pagination: { showingStart: 1, showingEnd: 10, total: 45 },
+      pagination: {
+        showingStart: 1,
+        showingEnd: fallbackTriageRows.length,
+        total: fallbackTriageRows.length,
+        page: 1,
+        pageSize: 10,
+        totalPages: 1,
+      },
     };
   }
 
@@ -476,7 +560,11 @@ function buildTriageView(queue: TriageQueue | undefined) {
   const tabs: TriageTab[] = [
     { key: "All", label: "All", count: total },
     ...queue.queueSummary
-      .filter((item) => ["Needs Review", "Brief Queued", "Brief Ready", "Approved", "Rejected"].includes(item.label))
+      .filter((item) =>
+        ["Needs Review", "Brief Queued", "Brief Ready", "Approved", "Rejected"].includes(
+          item.label,
+        ),
+      )
       .map((item) => ({
         key: item.label as QueueStatus,
         label: displayQueueLabel(item.label),
@@ -514,6 +602,30 @@ function displayQueueLabel(label: string) {
   return label === "Needs Review" ? "Pending Review" : label;
 }
 
+function statusForTab(tab: TriageTab["key"]) {
+  const statusByLabel: Partial<Record<QueueStatus, string>> = {
+    "Needs Review": "pending_review",
+    "Brief Queued": "brief_queued",
+    "Brief Ready": "brief_ready",
+    Approved: "approved",
+    Rejected: "rejected",
+    "Brief Failed": "brief_failed",
+    New: "new",
+    Normalized: "normalized",
+    Scored: "scored",
+  };
+  return tab === "All" ? undefined : statusByLabel[tab];
+}
+
+function pageNumbers(totalPages: number, currentPage: number) {
+  const visiblePageCount = Math.min(totalPages, 5);
+  const start = Math.min(
+    Math.max(currentPage - 2, 1),
+    Math.max(totalPages - visiblePageCount + 1, 1),
+  );
+  return Array.from({ length: visiblePageCount }, (_, index) => start + index);
+}
+
 function logoColorFor(name: string) {
   const colors = ["#D9D2C6", "#FF7A66", "#87A89A", "#F4F6FB", "#5DD7D4", "#8A4BFF"];
   const index = name.charCodeAt(0) % colors.length;
@@ -522,20 +634,41 @@ function logoColorFor(name: string) {
 
 function Triage() {
   const { success, warning, error, info, loading, updateToast } = useToast();
-  const queue = useQuery(getTriageQueue, {});
-  const reviewSelectedCandidates = useMutation(reviewCandidates);
-  const queueSelectedBriefs = useMutation(queueBriefsReference);
-  const briefRuns = useQuery(getBriefRunsReference, { limit: 50 });
-  const startScanAction = useAction(startScanReference);
-  const view = buildTriageView(queue);
   const [activeTab, setActiveTab] = useState<TriageTab["key"]>("All");
-  const [selected, setSelected] = useState<Set<string>>(new Set(["dc_002", "dc_004"]));
-  const [focusedRowId, setFocusedRowId] = useState("dc_002");
+  const [filters, setFilters] = useState<TriageFilters>({
+    sector: "",
+    geography: "",
+    dealType: "",
+    status: "",
+    sourceClass: "",
+    scorePreset: "",
+  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [focusedRowId, setFocusedRowId] = useState("");
   const [railTab, setRailTab] = useState<"Runs" | "Activity">("Runs");
   const [isReviewing, setIsReviewing] = useState(false);
   const [isQueueingBriefs, setIsQueueingBriefs] = useState(false);
   const [showAllBriefRuns, setShowAllBriefRuns] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const queue = useQuery(getTriageQueue, {
+    page,
+    pageSize: rowsPerPage,
+    search: searchTerm.trim() || undefined,
+    sector: filters.sector || undefined,
+    geography: filters.geography || undefined,
+    dealType: filters.dealType || undefined,
+    status: statusForTab(activeTab) ?? (filters.status || undefined),
+    sourceClass: filters.sourceClass || undefined,
+    scorePreset: filters.scorePreset || undefined,
+  });
+  const reviewSelectedCandidates = useMutation(reviewCandidates);
+  const queueSelectedBriefs = useMutation(queueBriefsReference);
+  const briefRuns = useQuery(getBriefRunsReference, { limit: 50 });
+  const startScanAction = useAction(startScanReference);
+  const view = buildTriageView(queue);
   const runDetails = useQuery(
     getBriefRunDetailsReference,
     selectedRunId ? { externalRunId: selectedRunId } : "skip",
@@ -543,6 +676,40 @@ function Triage() {
 
   const openRunDetails = (id: string) => {
     setSelectedRunId(id);
+  };
+
+  const updateFilter = (key: TriageFilterKey, value: string) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+    setActiveTab("All");
+    setPage(1);
+    setSelected(new Set());
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      sector: "",
+      geography: "",
+      dealType: "",
+      status: "",
+      sourceClass: "",
+      scorePreset: "",
+    });
+    setSearchTerm("");
+    setActiveTab("All");
+    setPage(1);
+    setSelected(new Set());
+  };
+
+  const goToPage = (nextPage: number) => {
+    const targetPage = Math.min(Math.max(nextPage, 1), view.pagination.totalPages);
+    setPage(targetPage);
+    setSelected(new Set());
+  };
+
+  const changeRowsPerPage = (value: string) => {
+    setRowsPerPage(Number(value));
+    setPage(1);
+    setSelected(new Set());
   };
 
   const visibleRows = useMemo(() => {
@@ -594,7 +761,8 @@ function Triage() {
   const startScan = async () => {
     const toastId = loading({
       title: "Scan started",
-      description: "Windmill is collecting verified public deal sources. The queue will update when ingestion finishes.",
+      description:
+        "Windmill is collecting verified public deal sources. The queue will update when ingestion finishes.",
       action: { label: "Dismiss", emphasis: "secondary" },
     });
 
@@ -657,7 +825,9 @@ function Triage() {
 
       setSelected(new Set());
       const skippedLabel =
-        result.skipped > 0 ? ` ${result.skipped} selected demo row${result.skipped === 1 ? " was" : "s were"} skipped.` : "";
+        result.skipped > 0
+          ? ` ${result.skipped} selected demo row${result.skipped === 1 ? " was" : "s were"} skipped.`
+          : "";
       if (action === "approve") {
         success({
           title: `${result.updated} candidate${result.updated === 1 ? "" : "s"} approved`,
@@ -712,7 +882,8 @@ function Triage() {
     if (status === "Partial Failed") {
       error({
         title: `${id} partially failed`,
-        description: "Some candidates in this brief run failed. Review the row progress and retry those candidates from the queue.",
+        description:
+          "Some candidates in this brief run failed. Review the row progress and retry those candidates from the queue.",
         action: { label: "Review queue" },
       });
       return;
@@ -736,7 +907,16 @@ function Triage() {
     <AppShell
       title="Triage Queue"
       subtitle="Review and action AI adoption deal candidates"
-      actions={<TriageHeaderActions onStartScan={startScan} />}
+      actions={
+        <TriageHeaderActions
+          searchTerm={searchTerm}
+          onSearchChange={(value) => {
+            setSearchTerm(value);
+            setPage(1);
+          }}
+          onStartScan={startScan}
+        />
+      }
     >
       <div className="space-y-5">
         <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.9fr)]">
@@ -756,7 +936,11 @@ function Triage() {
                     <button
                       key={tab.key}
                       type="button"
-                      onClick={() => setActiveTab(tab.key)}
+                      onClick={() => {
+                        setActiveTab(tab.key);
+                        setPage(1);
+                        setSelected(new Set());
+                      }}
                       className={`border-b pb-3 text-[11px] transition-colors ${
                         isActive
                           ? "border-lime text-text-primary"
@@ -773,13 +957,47 @@ function Triage() {
 
             <div className="border-b border-hairline-soft px-4 py-3 sm:px-5">
               <div className="flex flex-wrap items-center gap-2.5">
-                <SearchField />
-                {desktopFilters.map((label) => (
-                  <FilterButton key={label} label={label} />
-                ))}
-                <FilterButton label="More" compact />
+                <SearchField
+                  value={searchTerm}
+                  onChange={(value) => {
+                    setSearchTerm(value);
+                    setPage(1);
+                  }}
+                />
+                <FilterSelect
+                  value={filters.sector}
+                  options={sectorOptions}
+                  onChange={(value) => updateFilter("sector", value)}
+                />
+                <FilterSelect
+                  value={filters.geography}
+                  options={geographyOptions}
+                  onChange={(value) => updateFilter("geography", value)}
+                />
+                <FilterSelect
+                  value={filters.dealType}
+                  options={dealTypeOptions}
+                  onChange={(value) => updateFilter("dealType", value)}
+                />
+                <FilterSelect
+                  value={filters.status}
+                  options={statusOptions}
+                  onChange={(value) => updateFilter("status", value)}
+                />
+                <FilterSelect
+                  value={filters.sourceClass}
+                  options={sourceClassOptions}
+                  onChange={(value) => updateFilter("sourceClass", value)}
+                />
+                <FilterSelect
+                  value={filters.scorePreset}
+                  options={scorePresetOptions}
+                  onChange={(value) => updateFilter("scorePreset", value)}
+                  compact
+                />
                 <button
                   type="button"
+                  onClick={clearFilters}
                   className="inline-flex h-9 items-center rounded-md border border-hairline bg-surface-1 px-4 text-[10.5px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
                 >
                   Clear
@@ -855,83 +1073,98 @@ function Triage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((row) => {
-                    const isSelected = selected.has(row.id);
-                    const isFocused = row.id === focusedRowId;
-
-                    return (
-                      <tr
-                        key={row.id}
-                        onClick={() => setFocusedRowId(row.id)}
-                        className={`border-t border-hairline-soft align-top transition-colors ${
-                          isSelected ? "bg-lime/[0.03]" : "hover:bg-surface-hover/30"
-                        } ${isFocused ? "shadow-[inset_0_0_0_1px_rgba(183,241,55,0.35)]" : ""}`}
+                  {visibleRows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={12}
+                        className="px-5 py-12 text-center text-[11px] text-text-secondary"
                       >
-                        <td className="px-4 py-3 sm:px-5">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleRow(row.id)}
-                            className="accent-lime"
-                            aria-label={`Select ${row.company}`}
-                          />
-                        </td>
-                        <td className="py-3 pr-3">
-                          <div className="flex items-start gap-3">
-                            <CompanyMark
-                              letter={row.logoLetter}
-                              color={row.logoColor}
-                              size={24}
+                        No candidates match the current search and filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleRows.map((row) => {
+                      const isSelected = selected.has(row.id);
+                      const isFocused = row.id === focusedRowId;
+
+                      return (
+                        <tr
+                          key={row.id}
+                          onClick={() => setFocusedRowId(row.id)}
+                          className={`border-t border-hairline-soft align-top transition-colors ${
+                            isSelected ? "bg-lime/[0.03]" : "hover:bg-surface-hover/30"
+                          } ${isFocused ? "shadow-[inset_0_0_0_1px_rgba(183,241,55,0.35)]" : ""}`}
+                        >
+                          <td className="px-4 py-3 sm:px-5">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleRow(row.id)}
+                              className="accent-lime"
+                              aria-label={`Select ${row.company}`}
                             />
-                            <div className="min-w-0">
-                              <div className="text-[11px] font-semibold leading-tight text-text-primary">
-                                {row.company}
-                              </div>
-                              <div className="mt-0.5 text-[10px] leading-tight text-text-secondary">
-                                {row.target}
+                          </td>
+                          <td className="py-3 pr-3">
+                            <div className="flex items-start gap-3">
+                              <CompanyMark
+                                letter={row.logoLetter}
+                                color={row.logoColor}
+                                size={24}
+                              />
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-semibold leading-tight text-text-primary">
+                                  {row.company}
+                                </div>
+                                <div className="mt-0.5 text-[10px] leading-tight text-text-secondary">
+                                  {row.target}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-3">
-                          <SectorChip sector={row.sector} />
-                        </td>
-                        <td className="py-3 pr-3 text-[10px] text-text-primary">{row.geography}</td>
-                        <td className="py-3 pr-3 text-[10px] text-text-primary">{row.dealType}</td>
-                        <td className="py-3 pr-3">
-                          <div className="max-w-[220px] text-[10px] leading-relaxed text-text-primary">
-                            {row.aiRole}
-                          </div>
-                        </td>
-                        <td className="py-3 pr-3">
-                          <ScoreBar value={row.confidence} />
-                        </td>
-                        <td className="py-3 pr-3">
-                          <ScoreBar value={row.thesisFit} />
-                        </td>
-                        <td className="py-3 pr-3">
-                          <ScoreBar value={row.sourceConfidence} />
-                        </td>
-                        <td className="py-3 pr-3">
-                          <span className="text-[10px] text-text-primary">{row.published}</span>
-                        </td>
-                        <td className="py-3 pr-3">
-                          <StatusBadge status={row.status} size="xs" />
-                        </td>
-                        <td className="py-3 pr-4 sm:pr-5">
-                          <Link
-                            to="/candidate"
-                            search={{ externalId: row.id }}
-                            onClick={(event) => event.stopPropagation()}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-text-muted transition-colors hover:border-hairline hover:bg-surface-2 hover:text-text-primary"
-                            aria-label={`Open ${row.company}`}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td className="py-3 pr-3">
+                            <SectorChip sector={row.sector} />
+                          </td>
+                          <td className="py-3 pr-3 text-[10px] text-text-primary">
+                            {row.geography}
+                          </td>
+                          <td className="py-3 pr-3 text-[10px] text-text-primary">
+                            {row.dealType}
+                          </td>
+                          <td className="py-3 pr-3">
+                            <div className="max-w-[220px] text-[10px] leading-relaxed text-text-primary">
+                              {row.aiRole}
+                            </div>
+                          </td>
+                          <td className="py-3 pr-3">
+                            <ScoreBar value={row.confidence} />
+                          </td>
+                          <td className="py-3 pr-3">
+                            <ScoreBar value={row.thesisFit} />
+                          </td>
+                          <td className="py-3 pr-3">
+                            <ScoreBar value={row.sourceConfidence} />
+                          </td>
+                          <td className="py-3 pr-3">
+                            <span className="text-[10px] text-text-primary">{row.published}</span>
+                          </td>
+                          <td className="py-3 pr-3">
+                            <StatusBadge status={row.status} size="xs" />
+                          </td>
+                          <td className="py-3 pr-4 sm:pr-5">
+                            <Link
+                              to="/candidate"
+                              search={{ externalId: row.id }}
+                              onClick={(event) => event.stopPropagation()}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-text-muted transition-colors hover:border-hairline hover:bg-surface-2 hover:text-text-primary"
+                              aria-label={`Open ${row.company}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -943,31 +1176,42 @@ function Triage() {
                   <span className="mono text-text-primary">
                     {view.pagination.showingStart} to {view.pagination.showingEnd}
                   </span>{" "}
-                  of <span className="mono text-text-primary">{view.pagination.total}</span>{" "}
-                  results
+                  of <span className="mono text-text-primary">{view.pagination.total}</span> results
                 </div>
                 <div className="flex items-center justify-start gap-1 lg:justify-center">
-                  <PageButton>
+                  <PageButton disabled={page <= 1} onClick={() => goToPage(page - 1)}>
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </PageButton>
-                  <PageButton active>1</PageButton>
-                  <PageButton>2</PageButton>
-                  <PageButton>3</PageButton>
-                  <PageButton>4</PageButton>
-                  <PageButton>5</PageButton>
-                  <PageButton>
+                  {pageNumbers(view.pagination.totalPages, page).map((pageNumber) => (
+                    <PageButton
+                      key={pageNumber}
+                      active={pageNumber === page}
+                      onClick={() => goToPage(pageNumber)}
+                    >
+                      {pageNumber}
+                    </PageButton>
+                  ))}
+                  <PageButton
+                    disabled={page >= view.pagination.totalPages}
+                    onClick={() => goToPage(page + 1)}
+                  >
                     <ChevronRight className="h-3.5 w-3.5" />
                   </PageButton>
                 </div>
                 <div className="flex items-center justify-start gap-2 lg:justify-end">
                   <span>Rows per page</span>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-2 rounded-md border border-hairline bg-surface-1 px-3 text-[10.5px] text-text-primary"
+                  <select
+                    value={rowsPerPage}
+                    onChange={(event) => changeRowsPerPage(event.target.value)}
+                    aria-label="Rows per page"
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-hairline bg-surface-1 px-3 text-[10.5px] text-text-primary outline-none focus:border-lime/50"
                   >
-                    <span className="mono">10</span>
-                    <ChevronDown className="h-3.5 w-3.5 text-text-muted" />
-                  </button>
+                    {[10, 25, 50, 100].map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -1035,7 +1279,9 @@ function Triage() {
             <Panel>
               <PanelHeader
                 title="Audit Trail"
-                action={<span className="text-[10.5px] hover:text-lime cursor-pointer">View all</span>}
+                action={
+                  <span className="text-[10.5px] hover:text-lime cursor-pointer">View all</span>
+                }
               />
               <div className="px-4 pb-4 sm:px-5">
                 <div className="space-y-0">
@@ -1063,12 +1309,22 @@ function Triage() {
   );
 }
 
-function TriageHeaderActions({ onStartScan }: { onStartScan: () => void | Promise<void> }) {
+function TriageHeaderActions({
+  searchTerm,
+  onSearchChange,
+  onStartScan,
+}: {
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  onStartScan: () => void | Promise<void>;
+}) {
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto lg:gap-3">
       <div className="relative hidden sm:block">
         <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
         <input
+          value={searchTerm}
+          onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Search company, target, or keyword..."
           className="h-10 w-[292px] rounded-lg border border-hairline bg-surface-1 pl-9 pr-14 text-[12px] placeholder:text-text-muted focus:border-lime/50 focus:outline-none xl:w-[320px]"
         />
@@ -1101,7 +1357,11 @@ function BriefRunDetailsDrawer({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/35" role="presentation" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/35"
+      role="presentation"
+      onMouseDown={onClose}
+    >
       <aside
         className="h-full w-full max-w-[440px] overflow-y-auto border-l border-hairline bg-surface-0/95 p-5 shadow-[-20px_0_70px_rgba(0,0,0,0.35)] backdrop-blur-xl"
         role="dialog"
@@ -1114,7 +1374,10 @@ function BriefRunDetailsDrawer({
             <div className="mono text-[9px] uppercase tracking-[0.16em] text-text-muted">
               Brief Run Details
             </div>
-            <h2 id="brief-run-details-title" className="mt-2 truncate text-[16px] font-semibold text-text-primary">
+            <h2
+              id="brief-run-details-title"
+              className="mt-2 truncate text-[16px] font-semibold text-text-primary"
+            >
               {run?.id ?? "Loading run..."}
             </h2>
           </div>
@@ -1144,10 +1407,15 @@ function BriefRunDetailsDrawer({
                 <StatusBadge status={run.status} size="xs" />
               </div>
               <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/8">
-                <div className="h-full rounded-full bg-lime transition-[width] duration-300" style={{ width: `${run.progress}%` }} />
+                <div
+                  className="h-full rounded-full bg-lime transition-[width] duration-300"
+                  style={{ width: `${run.progress}%` }}
+                />
               </div>
               <div className="mt-2 flex justify-between text-[10px] text-text-muted">
-                <span>{run.completed} completed / {run.total} total</span>
+                <span>
+                  {run.completed} completed / {run.total} total
+                </span>
                 <span className="mono">{run.progress}%</span>
               </div>
               <div className="mt-3 text-[10px] text-text-muted">Started {run.when}</div>
@@ -1168,9 +1436,15 @@ function BriefRunDetailsDrawer({
                   const style = statusStyles[item.status] ?? statusStyles.Empty;
                   const Icon = style.icon;
                   return (
-                    <div key={item.externalId} className="rounded-lg border border-hairline-soft bg-surface-2/30 px-3 py-3">
+                    <div
+                      key={item.externalId}
+                      className="rounded-lg border border-hairline-soft bg-surface-2/30 px-3 py-3"
+                    >
                       <div className="flex items-start gap-3">
-                        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: style.color }} />
+                        <Icon
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                          style={{ color: style.color }}
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[10.5px] font-medium text-text-primary">
                             {item.company} / {item.target}
@@ -1178,7 +1452,9 @@ function BriefRunDetailsDrawer({
                           <div className="mt-1 text-[10px]" style={{ color: style.color }}>
                             {item.status}
                           </div>
-                          {item.error ? <div className="mt-1 text-[10px] text-danger">{item.error}</div> : null}
+                          {item.error ? (
+                            <div className="mt-1 text-[10px] text-danger">{item.error}</div>
+                          ) : null}
                         </div>
                         <Link
                           to="/candidate"
@@ -1232,7 +1508,10 @@ function SummaryRunCard({
       <div className="text-[10px] text-text-secondary">{label}</div>
       <div className="mt-3 flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-[11px] font-medium" style={{ color: style.color }}>
+          <div
+            className="flex items-center gap-2 text-[11px] font-medium"
+            style={{ color: style.color }}
+          >
             <Icon className={`h-3.5 w-3.5 ${status === "Running" ? "animate-spin" : ""}`} />
             {status}
           </div>
@@ -1267,11 +1546,13 @@ function QueueSummaryCard({ items }: { items: QueueSummaryItem[] }) {
   );
 }
 
-function SearchField() {
+function SearchField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     <div className="relative min-w-[220px] flex-1 xl:max-w-[170px]">
       <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
       <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
         placeholder="Search table..."
         className="h-9 w-full rounded-md border border-hairline bg-surface-1 pl-9 pr-3 text-[10.5px] placeholder:text-text-muted focus:border-lime/50 focus:outline-none"
       />
@@ -1279,17 +1560,32 @@ function SearchField() {
   );
 }
 
-function FilterButton({ label, compact = false }: { label: string; compact?: boolean }) {
+function FilterSelect({
+  value,
+  options,
+  onChange,
+  compact = false,
+}: {
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  compact?: boolean;
+}) {
   return (
-    <button
-      type="button"
-      className={`inline-flex h-9 items-center justify-between rounded-md border border-hairline bg-surface-1 px-3 text-[10.5px] text-text-primary transition-colors hover:bg-surface-hover ${
-        compact ? "min-w-[78px]" : "min-w-[108px]"
-      }`}
-    >
-      <span className="truncate">{label}</span>
-      <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 text-text-muted" />
-    </button>
+    <div className={`relative ${compact ? "min-w-[78px]" : "min-w-[108px]"}`}>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 w-full appearance-none rounded-md border border-hairline bg-surface-1 px-3 pr-8 text-[10.5px] text-text-primary outline-none transition-colors hover:bg-surface-hover focus:border-lime/50"
+      >
+        {options.map((option) => (
+          <option key={option.value || option.label} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+    </div>
   );
 }
 
@@ -1363,17 +1659,27 @@ function SectorChip({ sector }: { sector: string }) {
 function PageButton({
   children,
   active = false,
+  disabled = false,
+  onClick,
 }: {
   children: React.ReactNode;
   active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
+      disabled={disabled}
+      onClick={onClick}
       className={`inline-flex h-7 min-w-[28px] items-center justify-center rounded-md px-2 text-[10.5px] mono transition-colors ${
         active
           ? "border border-lime/40 bg-lime/[0.10] text-lime"
           : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+      } ${
+        disabled
+          ? "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-text-secondary"
+          : ""
       }`}
     >
       {children}
@@ -1421,7 +1727,9 @@ function RunSection({
                   className="inline-flex min-w-[74px] items-center gap-1 text-[10px]"
                   style={{ color: style.color }}
                 >
-                  <Icon className={`h-3.5 w-3.5 ${row.status === "Running" ? "animate-spin" : ""}`} />
+                  <Icon
+                    className={`h-3.5 w-3.5 ${row.status === "Running" ? "animate-spin" : ""}`}
+                  />
                   {row.status}
                 </span>
                 <span className="mono shrink-0 text-[10px] text-text-muted">{row.when}</span>
@@ -1450,13 +1758,7 @@ function RunSection({
   );
 }
 
-function AuditItem({
-  entry,
-  isLast,
-}: {
-  entry: AuditTrailEntry;
-  isLast: boolean;
-}) {
+function AuditItem({ entry, isLast }: { entry: AuditTrailEntry; isLast: boolean }) {
   return (
     <div className="relative flex gap-3 pb-4">
       <div className="relative flex w-8 shrink-0 justify-center">

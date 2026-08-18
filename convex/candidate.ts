@@ -151,6 +151,7 @@ export const getDetail = query({
           `${candidate.company} / ${candidate.target || "N/A"} is being reviewed for AI adoption relevance.`,
         reasons: reasonBullets(candidate),
       },
+      preReviewAssessment: candidate.preReviewAssessment ?? null,
       tags: tagsFor(candidate, sources),
     };
   },
@@ -469,6 +470,7 @@ function heroFields(candidate: Doc<"dealCandidates">) {
 function sourceRow(source: Doc<"sourceHits">, n: number) {
   return {
     n,
+    externalId: source.externalId,
     headline: source.headline,
     publisher: source.publisher,
     date: formatDateLabel(source.publishedAt),
@@ -476,6 +478,7 @@ function sourceRow(source: Doc<"sourceHits">, n: number) {
     tone: source.sourceType.includes("release") ? "purple" : "blue",
     url: source.url,
     reputation: source.publisherReputation ?? "Medium",
+    corroborationEvidence: source.corroboration?.evidence ?? [],
   };
 }
 

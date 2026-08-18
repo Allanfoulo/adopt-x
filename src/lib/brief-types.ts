@@ -16,6 +16,39 @@ export type ArchiveRow = {
 
 export type BriefPoint = { title: string; detail: string };
 export type BriefOpportunity = BriefPoint & { confidence: "High" | "Medium" | "Low" | string };
+export type EvidenceClaim = {
+  claimId: string;
+  claim: string;
+  relation: "supports" | "contradicts";
+  sourceExternalIds: string[];
+};
+export type PreReviewAssessment = {
+  signal: string;
+  interestingBecause: string;
+  preliminaryThesis: string;
+  counterThesis: string;
+  evidenceRefs: EvidenceClaim[];
+  missingEvidence: string[];
+  confidenceRationale: string;
+};
+export type ThesisMap = {
+  signal: string;
+  surfaceInterpretation: string;
+  interestingBecause: string;
+  thesis: string;
+  evidenceClaims: EvidenceClaim[];
+  implications: BriefPoint[];
+  followTheMoney: BriefPoint[];
+  invalidationConditions: string[];
+  counterThesis: string;
+  opportunities: BriefOpportunity[];
+  confidence: {
+    level: "High" | "Medium" | "Low" | string;
+    rationale: string;
+    basis: string;
+  };
+  limitations: string[];
+};
 export type BriefAnalysis = {
   capabilityPurchased: string[];
   buildVsBuy: string;
@@ -46,6 +79,7 @@ export type ArchiveDetail = {
     confidenceScore: number | null;
     last30daysUsed: boolean;
     analysis: BriefAnalysis | null;
+    thesisMap: ThesisMap | null;
     version: string;
     status: string;
     updatedAt: number;
@@ -60,7 +94,14 @@ export type ArchiveDetail = {
     announcementDate: string;
   };
   transaction: { label: string; value: string }[];
-  sources: { headline: string; publisher: string; date: string; type: string; url: string }[];
+  sources: {
+    externalId: string;
+    headline: string;
+    publisher: string;
+    date: string;
+    type: string;
+    url: string;
+  }[];
   auditTrail: {
     actor: string;
     initials: string;

@@ -12,6 +12,23 @@ export const sourceHitSchema = z.object({
   hash: z.string(),
 });
 
+export const evidenceReferenceSchema = z.object({
+  claimId: z.string().min(1),
+  claim: z.string().min(1),
+  relation: z.enum(["supports", "contradicts"]),
+  sourceExternalIds: z.array(z.string()),
+});
+
+export const preReviewAssessmentSchema = z.object({
+  signal: z.string().min(1),
+  interestingBecause: z.string().min(1),
+  preliminaryThesis: z.string().min(1),
+  counterThesis: z.string().min(1),
+  evidenceRefs: z.array(evidenceReferenceSchema),
+  missingEvidence: z.array(z.string().min(1)),
+  confidenceRationale: z.string().min(1),
+});
+
 export const candidateDraftSchema = z.object({
   company: z.string(),
   target: z.string(),
@@ -20,6 +37,7 @@ export const candidateDraftSchema = z.object({
   geography: z.string(),
   aiRole: z.string(),
   reasoningSummary: z.string(),
+  preReviewAssessment: preReviewAssessmentSchema,
 });
 
 export const adoptionScanInputSchema = z.object({
@@ -50,3 +68,4 @@ export const adoptionScanOutputSchema = z.object({
 
 export type AdoptionScanInput = z.infer<typeof adoptionScanInputSchema>;
 export type CandidateDraft = z.infer<typeof candidateDraftSchema>;
+export type PreReviewAssessment = z.infer<typeof preReviewAssessmentSchema>;

@@ -2,6 +2,60 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { scoreBreakdownValidator } from "./scoring";
 
+const evidenceReferenceValidator = v.object({
+  claimId: v.string(),
+  claim: v.string(),
+  relation: v.union(v.literal("supports"), v.literal("contradicts")),
+  sourceExternalIds: v.array(v.string()),
+});
+
+const preReviewAssessmentValidator = v.object({
+  signal: v.string(),
+  interestingBecause: v.string(),
+  preliminaryThesis: v.string(),
+  counterThesis: v.string(),
+  evidenceRefs: v.array(evidenceReferenceValidator),
+  missingEvidence: v.array(v.string()),
+  confidenceRationale: v.string(),
+});
+
+const analysisPointValidator = v.object({ title: v.string(), detail: v.string() });
+const corroborationEvidenceValidator = v.object({
+  externalId: v.string(),
+  title: v.string(),
+  url: v.string(),
+  description: v.string(),
+  markdown: v.string(),
+});
+const thesisMapValidator = v.object({
+  signal: v.string(),
+  surfaceInterpretation: v.string(),
+  interestingBecause: v.string(),
+  thesis: v.string(),
+  evidenceClaims: v.array(evidenceReferenceValidator),
+  implications: v.array(analysisPointValidator),
+  followTheMoney: v.array(analysisPointValidator),
+  invalidationConditions: v.array(v.string()),
+  counterThesis: v.string(),
+  opportunities: v.array(
+    v.object({
+      title: v.string(),
+      detail: v.string(),
+      confidence: v.union(v.literal("High"), v.literal("Medium"), v.literal("Low")),
+    }),
+  ),
+  confidence: v.object({
+    level: v.union(v.literal("High"), v.literal("Medium"), v.literal("Low")),
+    rationale: v.string(),
+    basis: v.union(
+      v.literal("candidate_confidence_score"),
+      v.literal("evidence_coverage"),
+      v.literal("mixed"),
+    ),
+  }),
+  limitations: v.array(v.string()),
+});
+
 export const userRole = v.union(v.literal("analyst"), v.literal("admin"));
 
 export const runStatus = v.union(
@@ -127,6 +181,7 @@ export default defineSchema({
         completed: v.boolean(),
         resultCount: v.number(),
         independentPublisherCount: v.number(),
+        evidence: v.array(corroborationEvidenceValidator),
       }),
     ),
     createdAt: v.number(),
@@ -158,6 +213,7 @@ export default defineSchema({
     sourceConfidence: v.number(),
     scoreBreakdown: v.optional(scoreBreakdownValidator),
     reasoningSummary: v.optional(v.string()),
+    preReviewAssessment: v.optional(preReviewAssessmentValidator),
     reviewEdits: v.optional(
       v.object({
         editedByUserId: v.optional(v.id("users")),
@@ -325,6 +381,7 @@ export default defineSchema({
         investmentThesis: v.string(),
       }),
     ),
+    thesisMap: v.optional(thesisMapValidator),
     sourcesSnapshot: v.array(v.id("sourceHits")),
     confidenceScore: v.optional(v.number()),
     last30daysUsed: v.optional(v.boolean()),

@@ -2,6 +2,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 const firecrawlEvidenceSchema = z.object({
+  externalId: z.string(),
   title: z.string(),
   url: z.string().url(),
   description: z.string(),
@@ -47,7 +48,7 @@ export const firecrawlCorroborate = createTool({
         },
         body: JSON.stringify({
           query,
-          limit: 5,
+          limit: 10,
           sources: ["web"],
           scrapeOptions: {
             formats: ["markdown"],
@@ -75,10 +76,11 @@ export const firecrawlCorroborate = createTool({
           Boolean(item.title && item.url),
         )
         .map((item) => ({
+          externalId: `firecrawl:${item.url}`,
           title: item.title,
           url: item.url,
           description: item.description ?? "",
-          markdown: (item.markdown ?? "").slice(0, 12_000),
+          markdown: (item.markdown ?? "").slice(0, 8_000),
         }))
         .filter((item) => item.url !== url)
         .slice(0, 5);

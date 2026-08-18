@@ -22,6 +22,15 @@ const sourceInput = v.object({
       completed: v.boolean(),
       resultCount: v.number(),
       independentPublisherCount: v.number(),
+      evidence: v.array(
+        v.object({
+          externalId: v.string(),
+          title: v.string(),
+          url: v.string(),
+          description: v.string(),
+          markdown: v.string(),
+        }),
+      ),
     }),
   ),
   candidateDraft: v.optional(
@@ -33,6 +42,24 @@ const sourceInput = v.object({
       geography: v.string(),
       aiRole: v.string(),
       reasoningSummary: v.string(),
+      preReviewAssessment: v.optional(
+        v.object({
+          signal: v.string(),
+          interestingBecause: v.string(),
+          preliminaryThesis: v.string(),
+          counterThesis: v.string(),
+          evidenceRefs: v.array(
+            v.object({
+              claimId: v.string(),
+              claim: v.string(),
+              relation: v.union(v.literal("supports"), v.literal("contradicts")),
+              sourceExternalIds: v.array(v.string()),
+            }),
+          ),
+          missingEvidence: v.array(v.string()),
+          confidenceRationale: v.string(),
+        }),
+      ),
     }),
   ),
 });
@@ -53,6 +80,13 @@ type SourceInput = {
     completed: boolean;
     resultCount: number;
     independentPublisherCount: number;
+    evidence: {
+      externalId: string;
+      title: string;
+      url: string;
+      description: string;
+      markdown: string;
+    }[];
   };
   candidateDraft?: {
     company: string;
@@ -62,6 +96,20 @@ type SourceInput = {
     geography: string;
     aiRole: string;
     reasoningSummary: string;
+    preReviewAssessment?: {
+      signal: string;
+      interestingBecause: string;
+      preliminaryThesis: string;
+      counterThesis: string;
+      evidenceRefs: {
+        claimId: string;
+        claim: string;
+        relation: "supports" | "contradicts";
+        sourceExternalIds: string[];
+      }[];
+      missingEvidence: string[];
+      confidenceRationale: string;
+    };
   };
 };
 
@@ -318,6 +366,7 @@ async function materializeSource(
       sourceConfidence: draft.sourceConfidence,
       scoreBreakdown: draft.scoreBreakdown,
       reasoningSummary: draft.reasoningSummary,
+      preReviewAssessment: draft.preReviewAssessment,
       createdAt: now,
       updatedAt: now,
     });
@@ -404,6 +453,28 @@ function extractCandidate(source: SourceInput | Doc<"sourceHits">) {
       names.target === "Unknown"
         ? "AI adoption signal detected; target and transaction details require analyst review."
         : `AI adoption signal extracted from ${source.publisher}; transaction details require analyst review.`,
+    preReviewAssessment: {
+      signal: source.headline,
+      interestingBecause:
+        "The source indicates an AI adoption signal, but the available evidence requires analyst review before a stronger conclusion is drawn.",
+      preliminaryThesis: "Preliminary thesis only; confidence is low because evidence is limited.",
+      counterThesis:
+        "The announcement may describe a product, marketing, or exploratory initiative rather than a durable adoption event.",
+      evidenceRefs: [
+        {
+          claimId: "E1",
+          claim: source.headline,
+          relation: "supports" as const,
+          sourceExternalIds: [source.externalId],
+        },
+      ],
+      missingEvidence: [
+        "Independent corroboration of the transaction or implementation details.",
+        "Evidence of production deployment, commercial terms, or measurable adoption outcomes.",
+      ],
+      confidenceRationale:
+        "The assessment is anchored to the supplied source only and should not be treated as a confirmed thesis.",
+    },
   };
 }
 

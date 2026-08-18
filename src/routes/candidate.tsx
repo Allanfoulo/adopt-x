@@ -6,11 +6,13 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { AppShell, Panel, StatusBadge, ToolbarButton } from "@/components/app-shell";
 import { useToast } from "@/components/app-toast";
+import type { PreReviewAssessment } from "@/lib/brief-types";
 import {
   ArrowLeft,
   Bot,
   Check,
   CheckCircle2,
+  ChevronDown,
   Edit3,
   ExternalLink,
   FileText,
@@ -41,12 +43,20 @@ type HeroField = {
 
 type SourceRow = {
   n: number;
+  externalId?: string;
   headline: string;
   publisher: string;
   date: string;
   type: string;
   tone: string;
   url?: string;
+  corroborationEvidence?: {
+    externalId: string;
+    title: string;
+    url: string;
+    description: string;
+    markdown: string;
+  }[];
 };
 
 type FactRow = {
@@ -107,6 +117,7 @@ type CandidateDetailData = {
     text: string;
     reasons: string[];
   };
+  preReviewAssessment: PreReviewAssessment | null;
   tags: string[];
 };
 
@@ -498,6 +509,8 @@ function CandidateDetail() {
               <AttributesScoresCard facts={view.facts} scoreRows={view.scoreRows} />
             </div>
 
+            <PreReviewAssessmentCard assessment={view.preReviewAssessment} />
+
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[.9fr_1.1fr]">
               <AnalystNotesCard />
               <InternalTagsCard tags={view.tags} />
@@ -611,8 +624,11 @@ function SourceProvenanceCard({ sources }: { sources: SourceRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {sources.map((source) => (
-              <tr key={source.n} className="border-t border-hairline-soft align-top text-[10.5px]">
+            {sources.flatMap((source) => [
+              <tr
+                key={`source-${source.n}`}
+                className="border-t border-hairline-soft align-top text-[10.5px]"
+              >
                 <td className="px-4 py-3 text-text-muted">{source.n}</td>
                 <td className="py-3 pr-4 leading-relaxed text-text-primary">
                   <div className="max-w-[280px]">{source.headline}</div>
@@ -637,8 +653,35 @@ function SourceProvenanceCard({ sources }: { sources: SourceRow[] }) {
                     <ExternalLink className="h-3.5 w-3.5" />
                   )}
                 </td>
-              </tr>
-            ))}
+              </tr>,
+              ...(source.corroborationEvidence ?? []).map((evidence) => (
+                <tr
+                  key={evidence.externalId}
+                  className="border-t border-hairline-soft/60 bg-surface-2/20 align-top text-[10px]"
+                >
+                  <td className="px-4 py-2 text-text-muted">-&gt;</td>
+                  <td className="py-2 pr-4 leading-relaxed text-text-secondary">
+                    <div className="max-w-[280px]">{evidence.title}</div>
+                  </td>
+                  <td className="py-2 pr-4 text-text-muted">Firecrawl</td>
+                  <td className="py-2 pr-4 text-text-muted">Cited during scan</td>
+                  <td className="py-2 pr-4">
+                    <TypeChip tone="teal" label="Corroboration" />
+                  </td>
+                  <td className="py-2 pr-4">
+                    <a
+                      href={evidence.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-text-muted transition-colors hover:text-lime"
+                      aria-label={`Open corroborating source: ${evidence.title}`}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </td>
+                </tr>
+              )),
+            ])}
           </tbody>
         </table>
       </div>
@@ -728,6 +771,103 @@ function AiSummaryCard({ summary }: { summary: CandidateDetailData["summary"] })
         </div>
       </div>
     </Panel>
+  );
+}
+
+function PreReviewAssessmentCard({ assessment }: { assessment: PreReviewAssessment | null }) {
+  return (
+    <Panel className="overflow-hidden">
+      <div className="border-b border-hairline-soft px-5 py-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-lime" />
+          <div>
+            <h3 className="text-[12px] font-semibold text-text-primary">Pre-review Assessment</h3>
+            <p className="text-[10px] text-text-muted">
+              Lightweight evidence framing to support the approval decision.
+            </p>
+          </div>
+        </div>
+      </div>
+      {!assessment ? (
+        <div className="p-5 text-[11px] leading-5 text-text-secondary">
+          Assessment unavailable: the scan did not return a structured pre-review assessment.
+        </div>
+      ) : (
+        <details className="group" open>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 marker:hidden">
+            <div className="min-w-0">
+              <div className="mono mb-1 text-[9px] uppercase tracking-[0.14em] text-text-muted">
+                Signal
+              </div>
+              <p className="text-[12px] font-medium leading-5 text-text-primary">
+                {assessment.signal}
+              </p>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-text-muted transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-4 border-t border-hairline-soft px-5 py-4 lg:grid-cols-2">
+            <AssessmentBlock label="Preliminary thesis" value={assessment.preliminaryThesis} />
+            <AssessmentBlock label="Interesting because" value={assessment.interestingBecause} />
+            <AssessmentBlock label="Counter-thesis" value={assessment.counterThesis} />
+            <AssessmentBlock label="Confidence rationale" value={assessment.confidenceRationale} />
+            <div>
+              <div className="mono mb-1.5 text-[9px] uppercase tracking-[0.14em] text-text-muted">
+                Missing evidence
+              </div>
+              {assessment.missingEvidence.length > 0 ? (
+                <ul className="space-y-1.5 text-[11px] leading-5 text-text-secondary">
+                  {assessment.missingEvidence.map((item) => (
+                    <li key={item}>• {item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-text-secondary">
+                  No material evidence gaps were returned.
+                </p>
+              )}
+            </div>
+            <div>
+              <div className="mono mb-1.5 text-[9px] uppercase tracking-[0.14em] text-text-muted">
+                Evidence references
+              </div>
+              {assessment.evidenceRefs.length > 0 ? (
+                <div className="space-y-2">
+                  {assessment.evidenceRefs.map((item) => (
+                    <div
+                      key={item.claimId}
+                      className="rounded-lg border border-hairline-soft bg-surface-1 p-3"
+                    >
+                      <div className="mb-1 flex items-center gap-2 text-[10px] font-medium text-text-primary">
+                        <span className="rounded border border-lime/30 px-1.5 py-0.5 text-lime">
+                          {item.claimId}
+                        </span>
+                        <span>{item.relation === "supports" ? "Supports" : "Contradicts"}</span>
+                      </div>
+                      <p className="text-[10.5px] leading-5 text-text-secondary">{item.claim}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-text-secondary">
+                  No source claim was strong enough to reference.
+                </p>
+              )}
+            </div>
+          </div>
+        </details>
+      )}
+    </Panel>
+  );
+}
+
+function AssessmentBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mono mb-1.5 text-[9px] uppercase tracking-[0.14em] text-text-muted">
+        {label}
+      </div>
+      <p className="text-[11px] leading-5 text-text-secondary">{value}</p>
+    </div>
   );
 }
 
